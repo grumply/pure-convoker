@@ -1,0 +1,66 @@
+name:              pure-convoker
+version:           0.8.0.0
+homepage:          purehs.org/doc/pure-convoker
+author:            Sean Hickman
+maintainer:        sean@grumply.com
+license:           BSD3
+license-file:      LICENSE
+cabal-version:     >= 1.10
+build-type:        Simple
+
+source-repository head
+  type: git
+  location: https://github.com/grumply/pure-convoker.git
+
+library
+  hs-source-dirs:
+      src
+
+  build-depends:
+      base
+    , pure-conjurer
+    , pure-elm
+    , pure-json
+    , pure-render
+    , containers
+    , hashable
+
+  exposed-modules:
+    Pure.Convoker
+
+  default-language: Haskell2010
+
+  default-extensions:
+    DerivingStrategies
+    TypeFamilies
+    FlexibleContexts
+    UndecidableInstances
+    DeriveGeneric
+    DeriveAnyClass
+    FlexibleInstances
+    TemplateHaskell
+    AllowAmbiguousTypes
+    RankNTypes
+    DataKinds
+    PartialTypeSignatures
+    TypeApplications
+    ScopedTypeVariables
+    DuplicateRecordFields
+    StandaloneDeriving
+    MultiParamTypeClasses
+    NamedFieldPuns
+    RecordWildCards
+    PatternSynonyms
+    BlockArguments
+    LambdaCase
+    CPP
+    DerivingVia
+    OverloadedStrings
+    DefaultSignatures
+    TypeOperators
+    InstanceSigs
+    ExistentialQuantification
+    RoleAnnotations
+    FunctionalDependencies
+    ViewPatterns
+    BangPatterns
