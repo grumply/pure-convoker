@@ -18,15 +18,23 @@ library
 
   build-depends:
       base
+    , pure-auth
     , pure-conjurer
     , pure-elm
     , pure-json
+    , pure-maybe
     , pure-render
+    , pure-sync
+    , pure-websocket
+    , pure-websocket-cache
     , containers
     , hashable
 
   exposed-modules:
     Pure.Convoker
+    Pure.Convoker.Comment
+    Pure.Convoker.Discussion
+    Pure.Convoker.DiscussionMeta
 
   default-language: Haskell2010
 
