@@ -19,22 +19,38 @@ library
   build-depends:
       base
     , pure-auth
+    , pure-bloom
     , pure-conjurer
     , pure-elm
+    , pure-hooks
     , pure-json
     , pure-maybe
     , pure-render
+    , pure-router
     , pure-sync
+    , pure-tagsoup
+    , pure-txt
     , pure-websocket
     , pure-websocket-cache
+    , pure-xss-sanitize
     , containers
     , hashable
+    , pandoc
 
   exposed-modules:
     Pure.Convoker
+    Pure.Convoker.Admins
     Pure.Convoker.Comment
     Pure.Convoker.Discussion
-    Pure.Convoker.DiscussionMeta
+    Pure.Convoker.Meta
+    Pure.Convoker.Mods
+    Pure.Convoker.UserVotes
+    Pure.Convoker.Discussion.Threaded
+    Pure.Convoker.Discussion.Shared.Ago
+    Pure.Convoker.Discussion.Shared.Markdown
+    Pure.Convoker.Discussion.Shared.Total
+    Pure.Convoker.Discussion.Threaded.Comment
+    Pure.Convoker.Discussion.Threaded.Meta
 
   default-language: Haskell2010
 
@@ -72,3 +88,4 @@ library
     FunctionalDependencies
     ViewPatterns
     BangPatterns
+    PolyKinds

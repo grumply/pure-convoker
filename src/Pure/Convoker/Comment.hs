@@ -1,105 +1,99 @@
-{-# language DuplicateRecordFields #-}
-module Pure.Convoker.Comment where
+module Pure.Convoker.Comment 
+  ( Comment(..)
+  , Product(..)
+  , Preview(..)
+  , Context(..)
+  , Name(..)
+  , canEditComment
+  ) where
 
-import Pure.Auth hiding (Key)
-import Pure.Data.JSON (ToJSON(..),FromJSON(..))
-import Pure.Elm.Component as Pure hiding (render,Node)
+import Pure.Convoker.Mods
+
+import Pure.Auth (Username)
 import Pure.Conjurer
+import Pure.Elm.Component hiding (not,key,pattern Meta)
+import Pure.Data.JSON
+import Pure.Data.Txt
 import Pure.Data.Render
 
 import Data.Hashable
-import Data.Tree
-import Data.Map (Map)
-import qualified Data.Map.Strict as Map
 
+import Control.Monad
+import Data.List as List
+import qualified Data.Graph as G
 import Data.Typeable
-import GHC.Generics
-  
-data Comment a
+import GHC.Generics hiding (Meta)
 
-data instance Resource (Comment a) = RawComment
-  { context :: (Context a,Name a)
-  , parent  :: Maybe (Key (Comment a)) 
-  , key     :: Key (Comment a)
-  , author  :: Username
-  , time    :: Time
-  , content :: Maybe (Product a,Preview a)
-  } deriving stock Generic
-deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Product a), ToJSON (Preview a)) => ToJSON (Resource (Comment a))
-deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Product a), FromJSON (Preview a)) => FromJSON (Resource (Comment a))
+{-
+Design notes:
+
+  What is implemented here:
+
+    data instance Product (Comment a)
+    data instance Preview (Comment a)
+    data instance Context (Comment a)
+    data instance Name (Comment a)
+    instance Previewable (Comment a)
+
+  What is not implemented here:
+
+    data instance Resource (Comment a)
+    instance Processable (Comment a)
+    instance Producible (Comment a)
+    instance Amendable (Comment a)
+    data instance Action (Comment a)
+    data instance Reaction (Comment a)
+
+  What is overridable with IncoherentInstances:
+
+    instance Previewable (Comment a)
+
+-}
+
+data Comment (a :: *)
 
 data instance Product (Comment a) = Comment
-  { context :: (Context a,Name a)
-  , parent  :: Maybe (Key (Comment a))
-  , key     :: Key (Comment a)
-  , author  :: Username
-  , time    :: Time
-  , content :: Maybe (Product a)
+  { author   :: Username
+  , key      :: Key (Comment a)
+  , parents  :: [Key (Comment a)]
+  , created  :: Time
+  , edited   :: Maybe Time
+  , content  :: [View]
   } deriving stock Generic
-deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Product a)) => ToJSON (Product (Comment a))
-deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Product a)) => FromJSON (Product (Comment a))
+    deriving anyclass (ToJSON,FromJSON)
 
 data instance Preview (Comment a) = CommentPreview
-  { context :: (Context a,Name a)
-  , parent  :: Maybe (Key (Comment a))
-  , key     :: Key (Comment a)
-  , author  :: Username
-  , time    :: Time
-  , content :: Maybe (Preview a)
+  { author   :: Username
+  , key      :: Key (Comment a)
+  , parents  :: [Key (Comment a)]
+  , created  :: Time
+  , edited   :: Maybe Time
+  , content  :: [View]
   } deriving stock Generic
-deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Preview a)) => ToJSON (Preview (Comment a))
-deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Preview a)) => FromJSON (Preview (Comment a))
-
-instance Amendable (Comment a) where
-  data Amend (Comment a)
-    = UpdateCommentContent (Maybe (Product a,Preview a))
-    deriving stock Generic
-    
-  amend (UpdateCommentContent mpp) RawComment {..} = 
-    Just RawComment
-      { content = mpp 
-      , ..
-      }
-
-deriving instance (ToJSON (Product a), ToJSON (Preview a)) => ToJSON (Amend (Comment a))
-deriving instance (FromJSON (Product a), FromJSON (Preview a)) => FromJSON (Amend (Comment a))
-
-instance Processable (Comment a) where
-  process _ RawComment {..} = do
-    now <- Pure.time
-    k <- newKey
-    pure $ Just RawComment
-      { key = k 
-      , time = now
-      , ..
-      }
-
-instance Producible (Comment a) where
-  produce live RawComment {..} = do
-    pure Comment 
-      { content = fmap fst content
-      , ..
-      }
-
-instance Previewable (Comment a) where
-  preview live RawComment {..} _ = 
-    pure CommentPreview 
-      { content = fmap snd content
-      , ..
-      }
+    deriving anyclass (ToJSON,FromJSON)
 
 data instance Context (Comment a) = CommentContext (Context a) (Name a)
   deriving stock Generic
-deriving instance (Eq (Context a), Eq (Name a)) => Eq (Context (Comment a))
-deriving instance (Ord (Context a), Ord (Name a)) => Ord (Context (Comment a))
-deriving instance (ToJSON (Context a), ToJSON (Name a)) => ToJSON (Context (Comment a))
-deriving instance (FromJSON (Context a), FromJSON (Name a)) => FromJSON (Context (Comment a))
-deriving instance (Typeable a, Pathable (Context a), Pathable (Name a)) => Pathable (Context (Comment a))
-deriving instance (Hashable (Context a), Hashable (Name a)) => Hashable (Context (Comment a))
+deriving instance (Eq (Context a),Eq (Name a)) => Eq (Context (Comment a))
+deriving instance (Ord (Context a),Ord (Name a)) => Ord (Context (Comment a))
+deriving instance (Hashable (Context a),Hashable (Name a)) => Hashable (Context (Comment a))
+deriving instance (Typeable a, Pathable (Context a),Pathable (Name a)) => Pathable (Context (Comment a))
+deriving instance (ToJSON (Context a),ToJSON (Name a)) => ToJSON (Context (Comment a))
+deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context (Comment a))
 
 data instance Name (Comment a) = CommentName (Key (Comment a))
   deriving stock (Generic,Eq,Ord)
-  deriving anyclass (ToJSON,FromJSON,Pathable,Hashable)
+  deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance Nameable (Comment a) where
-  toName RawComment {..} = CommentName key
+instance Previewable (Comment a) where
+  preview _ _ Comment {..} = pure CommentPreview {..}
+
+canEditComment 
+  :: ( Typeable a
+     , Pathable (Context a), Hashable (Context a)
+     , Pathable (Name a), Hashable (Name a)
+     ) => Context a -> Name a -> Key (Comment a) -> Username -> IO Bool
+canEditComment ctx nm k un = 
+  tryReadProduct fullPermissions def (CommentContext ctx nm) (CommentName k) >>= \case
+    Just Comment {..} | author == un -> pure True
+    _ -> isMod (ModsContext ctx) un
