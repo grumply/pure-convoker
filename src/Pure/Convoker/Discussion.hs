@@ -94,8 +94,13 @@ instance Previewable (Discussion a) where
   preview _ RawDiscussion {..} _ =
     pure DiscussionPreview { comments = fmap snd comments, .. }
 
-data instance Action (Discussion a) 
-data instance Reaction (Discussion a) 
+data instance Action (Discussion a) = NoDiscussionAction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+
+data instance Reaction (Discussion a) = NoDiscussionReaction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
 type DiscussionViewer a = WebSocket -> Context a -> Name a -> Maybe Username -> Refresher -> Maybe (Product Admins,Product (Mods a),Product (UserVotes a),Product (Meta a),Product (Discussion a)) -> View
 type Refresher = IO ()
@@ -144,7 +149,7 @@ discussion ws ctx nm viewer =
           (ModsContext ctx,ModsName)
      
       getVotes :: IO (Maybe (Product (UserVotes a))) <-
-        flip (maybe (pure (pure (Just emptyUserVotes)))) mun $ \un ->
+        flip (maybe (pure (pure (Just (emptyUserVotes (fromTxt def)))))) mun $ \un ->
           async do
             request (readingAPI @(UserVotes a)) ws
               (readProduct @(UserVotes a))
@@ -188,26 +193,23 @@ threads sorter viewer ws ctx nm mun refresh (Just (admins,mods,votes,meta,Discus
         : forest (Just key) sub 
         )
 
-commentCallbacks 
+extendCommentCallbacks 
   :: forall a. 
     ( Typeable a
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-    ) => Permissions (Discussion a) -> Callbacks (Discussion a) -> Callbacks (Comment a)
-commentCallbacks discussionPermissions discussionCallbacks = def
-  { onCreate = \(CommentContext ctx nm) _ res pro pre -> void do
+    ) => Permissions (Discussion a) -> Callbacks (Discussion a) -> Callbacks (Comment a) -> Callbacks (Comment a)
+extendCommentCallbacks discussionPermissions discussionCallbacks cbs = cbs
+  { onCreate = \(CommentContext ctx nm) cnm res pro pre -> void do
+    onCreate cbs (CommentContext ctx nm) cnm res pro pre
     tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
   
-  , onUpdate = \(CommentContext ctx nm) _ res pro pre -> void do
+  , onUpdate = \(CommentContext ctx nm) cnm res pro pre -> void do
+    onUpdate cbs (CommentContext ctx nm) cnm res pro pre
     tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
-{-
-  , onDelete = \(CommentContext ctx nm) _ res pro@Comment { key } pre -> void do
-    tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
-      (DiscussionContext ctx nm) DiscussionName 
-        (SetComment )
--}
+
   }

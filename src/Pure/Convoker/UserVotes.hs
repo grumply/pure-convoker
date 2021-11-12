@@ -9,6 +9,8 @@ module Pure.Convoker.UserVotes
   , userVotesInteractions
   , userVotesPermissions
   , emptyUserVotes
+  , tryUpvote
+  , tryDownvote
   ) where
 
 import Pure.Convoker.Comment
@@ -25,6 +27,7 @@ import Data.Hashable
 import Control.Monad
 import Data.Foldable
 import Data.List as List
+import Data.Maybe
 import Data.Typeable
 import GHC.Generics hiding (Meta)
 import System.IO.Unsafe
@@ -51,13 +54,15 @@ Design notes:
 data UserVotes (a :: *)
 
 data instance Resource (UserVotes a) = RawUserVotes
-  { upvotes   :: [Key (Comment a)]
+  { username  :: Username
+  , upvotes   :: [Key (Comment a)]
   , downvotes :: [Key (Comment a)]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
 data instance Product (UserVotes a) = UserVotes
-  { upvotes   :: Bloom
+  { username  :: Username
+  , upvotes   :: Bloom
   , downvotes :: Bloom
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
@@ -87,6 +92,9 @@ deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context 
 data instance Name (UserVotes a) = UserVotesName Username
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
+
+instance Nameable (UserVotes a) where
+  toName RawUserVotes {..} = UserVotesName username
 
 instance Amendable (UserVotes a) where
   data Amend (UserVotes a)
@@ -134,25 +142,46 @@ instance Producible (UserVotes a) where
     downvotes' <- new 0.0001 (List.length downvotes)
     for_ downvotes (add downvotes')
 
-    pure (UserVotes upvotes' downvotes')
+    pure (UserVotes username upvotes' downvotes')
 
 instance Previewable (UserVotes a) where
   preview _ _ _ = pure NoUserVotesPreview
 
-data instance Action (UserVotes a)
-data instance Reaction (UserVotes a)
+data instance Action (UserVotes a) = NoUserVotesAction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+data instance Reaction (UserVotes a) = NoUserVotesReaction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
 userVotesInteractions :: Typeable a => Interactions (UserVotes a)
 userVotesInteractions = def
 
 userVotesPermissions :: Typeable a => Username -> Permissions (UserVotes a)
-userVotesPermissions un = readPermissions { canAmend = canAmend', canUpdate = canUpdate' }
+userVotesPermissions un = readPermissions { canAmend = canAmend' }
   where
     canAmend' ctx (UserVotesName user) _ = pure (user == un)
-    canUpdate' ctx (UserVotesName user) = pure (user == un)
 
-emptyUserVotes :: Product (UserVotes a)
-emptyUserVotes = unsafePerformIO do
+emptyUserVotes :: Username -> Product (UserVotes a)
+emptyUserVotes un = unsafePerformIO do
   us <- new 0.0001 100
   ds <- new 0.0001 100
-  pure (UserVotes us ds)
+  pure (UserVotes un us ds)
+
+tryUpvote 
+  :: ( Typeable a
+     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
+     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
+     ) => Permissions (UserVotes a) -> Callbacks (UserVotes a) -> Context a -> Name a -> Username -> Key (Comment a) -> IO Bool
+tryUpvote permissions callbacks ctx nm un k = fmap isJust do
+  tryAmend permissions callbacks (UserVotesContext ctx nm) (UserVotesName un)
+    (Upvote k)
+
+tryDownvote 
+  :: ( Typeable a
+     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
+     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
+     ) => Permissions (UserVotes a) -> Callbacks (UserVotes a) -> Context a -> Name a -> Username -> Key (Comment a) -> IO Bool
+tryDownvote permissions callbacks ctx nm un k = fmap isJust do
+  tryAmend permissions callbacks (UserVotesContext ctx nm) (UserVotesName un)
+    (Downvote k)

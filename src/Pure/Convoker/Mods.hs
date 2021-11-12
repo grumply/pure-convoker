@@ -3,14 +3,14 @@ module Pure.Convoker.Mods
   , Resource(..)
   , Product(..)
   , Preview(..)
-  , Amend(..)
   , Context(..)
   , Name(..)
+  , Amend(..)
   , tryCreateMods
   , tryAddMod
   , tryRemoveMod
   , modsPermissions
-  , modsCallbacks
+  , modsInteractions
   , isMod
   ) where
 
@@ -28,7 +28,8 @@ import Data.Maybe
 import Data.Typeable
 import GHC.Generics
 
-data Mods a
+data Mods (a :: *)
+
 data instance Resource (Mods a) = RawMods
   { mods :: [Username]
   } deriving stock Generic
@@ -67,18 +68,22 @@ instance Previewable (Mods a) where
 instance Nameable (Mods a) where
   toName _ = ModsName
 
-data instance Action (Mods a)
-data instance Reaction (Mods a)
+data instance Action (Mods a) = NoModsAction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+data instance Reaction (Mods a) = NoModsReaction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
 instance Amendable (Mods a) where
-  data Amend (Mods a) = Add Username | Remove Username
+  data Amend (Mods a) = AddMod Username | RemoveMod Username
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-  amend (Add un) RawMods {..} | un `notElem` mods = 
+  amend (AddMod un) RawMods {..} | un `notElem` mods = 
     Just RawMods { mods = un : mods }
   
-  amend (Remove un) RawMods {..} | un `elem` mods, List.length mods > 1, List.last mods /= un =
+  amend (RemoveMod un) RawMods {..} | un `elem` mods, List.length mods > 1, List.last mods /= un =
     Just RawMods { mods = List.filter (/= un) mods }
 
   amend _ _ = 
@@ -97,14 +102,19 @@ tryAddMod
      , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
      ) => Permissions (Mods a) -> Callbacks (Mods a) -> Context a -> Username -> IO Bool
 tryAddMod permissions callbacks ctx mod = fmap isJust do
-  tryAmend permissions callbacks (ModsContext ctx) ModsName (Add mod)
+  tryAmend permissions callbacks (ModsContext ctx) ModsName 
+    (AddMod mod)
 
 tryRemoveMod 
   :: ( Typeable (a :: *)
      , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
      ) => Permissions (Mods a) -> Callbacks (Mods a) -> Context a -> Username -> IO Bool
 tryRemoveMod permissions callbacks ctx mod = fmap isJust do
-  tryAmend permissions callbacks (ModsContext ctx) ModsName (Remove mod)
+  tryAmend permissions callbacks (ModsContext ctx) ModsName 
+    (RemoveMod mod)
+
+modsInteractions :: Typeable a => Interactions (Mods a)
+modsInteractions = def
 
 modsPermissions 
   :: ( Typeable (a :: *)
@@ -113,9 +123,6 @@ modsPermissions
 modsPermissions un = readPermissions { canAmend = canAmend' }
   where
     canAmend' ctx _ _ = isMod ctx un
-
-modsCallbacks :: Callbacks (Mods a)
-modsCallbacks = def
 
 isMod :: (Pathable (Context a), Hashable (Context a), Typeable a) => Context a -> Username -> IO Bool
 isMod ctx un =

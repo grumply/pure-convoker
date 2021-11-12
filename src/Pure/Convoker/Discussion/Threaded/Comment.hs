@@ -1,5 +1,9 @@
 module Pure.Convoker.Discussion.Threaded.Comment 
   ( Comment(..)
+  , Resource(..)
+  , Amend(..)
+  , Action(..)
+  , Reaction(..)
   , commentPermissions
   , commentInteractions
   , canEditComment
@@ -72,7 +76,7 @@ instance Amendable (Comment a) where
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-  amend (SetContent md t) RawComment {..} = 
+  amend (SetContent md t) RawComment {..} | not deleted = 
     Just RawComment
       { content = md 
       , edited = Just t
@@ -94,8 +98,12 @@ instance Amendable (Comment a) where
   amend _ _ = 
     Nothing
 
-data instance Action (Comment a)
-data instance Reaction (Comment a)
+data instance Action (Comment a) = NoCommentAction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+data instance Reaction (Comment a) = NoCommentReaction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
 instance Processable (Comment a) where
   process _ RawComment {..} = do
@@ -103,7 +111,7 @@ instance Processable (Comment a) where
     k <- newKey
     pure $ Just RawComment
       { created = t
-      , parents = List.take 2 parents
+      , parents = List.take 1 parents
       , edited = Nothing
       , key = k 
       , ..
@@ -113,7 +121,7 @@ instance Processable (Comment a) where
 instance Producible (Comment a) where
   produce _ RawComment {..} =
     pure Comment
-      { content = parseMarkdown content
+      { content = if deleted then [ "[ removed ]" ] else parseMarkdown content
       , ..
       }
 

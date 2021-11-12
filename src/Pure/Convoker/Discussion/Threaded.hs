@@ -1,23 +1,23 @@
-module Pure.Convoker.Discussion.Threaded where
+module Pure.Convoker.Discussion.Threaded 
+  ( module Pure.Convoker.Discussion.Threaded
+  , module Export
+  ) where
 
-import Pure.Convoker.Admins
-import Pure.Convoker.Comment
-import Pure.Convoker.Discussion
+import Pure.Convoker as Export hiding (Upvote,Downvote,authenticatedEndpoints,unauthenticatedEndpoints,endpoints)
+import qualified Pure.Convoker as Convoker
+
 import Pure.Convoker.Discussion.Shared.Ago
 import Pure.Convoker.Discussion.Shared.Markdown
 import Pure.Convoker.Discussion.Shared.Total
 import Pure.Convoker.Discussion.Threaded.Comment
 import Pure.Convoker.Discussion.Threaded.Meta hiding (Upvote,Downvote)
-import Pure.Convoker.Meta 
-import Pure.Convoker.Mods
-import Pure.Convoker.UserVotes hiding (Upvote,Downvote)
-import qualified Pure.Convoker.UserVotes as UserVotes
 
-import Pure.Auth (Username)
+import Pure.Auth (Username,Token(..))
 import Pure.Conjurer
 import Pure.Data.Bloom as Bloom
 import Pure.Data.JSON hiding (Null)
 import Pure.Elm.Component hiding (pattern Meta)
+import Pure.Hooks (useEffectWith')
 import Pure.WebSocket
 
 import Data.Hashable
@@ -26,6 +26,106 @@ import Data.List as List
 import Data.Maybe
 import Data.Typeable
 import System.IO.Unsafe
+
+endpoints 
+  :: forall _role a.
+    ( Typeable _role
+    , Typeable a
+    
+    , Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , ToJSON (Context a), FromJSON (Context a)
+
+    , Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , ToJSON (Name a), FromJSON (Name a)
+    
+    , Nameable (Comment a)
+    , Previewable (Comment a)
+    , Processable (Comment a)
+    , Producible (Comment a)
+    , Previewable (Meta a)
+    , Processable (Meta a)
+    , Producible  (Meta a)
+      
+    ) => WebSocket
+      -> Maybe (Token _role)
+      -> Callbacks (Discussion a) 
+      -> Callbacks (Comment a)
+      -> Callbacks (Meta a)
+      -> Callbacks (Mods a)
+      -> Callbacks (UserVotes a)
+      -> View
+endpoints ws mt discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks = 
+  useEffectWith' (effect mt) mt Null
+  where
+    effect = \case
+      Just (Token (un,_)) -> 
+        Convoker.authenticatedEndpoints ws un 
+          (commentPermissions un) 
+          metaPermissions 
+          discussionCallbacks 
+          (extendCommentCallbacks readPermissions discussionCallbacks commentCallbacks) 
+          metaCallbacks 
+          modsCallbacks 
+          userVotesCallbacks
+          commentInteractions
+          metaInteractions
+
+      _ -> 
+        Convoker.unauthenticatedEndpoints ws 
+          discussionCallbacks 
+          metaCallbacks 
+          modsCallbacks
+
+unauthenticatedEndpoints
+  :: forall a.
+    ( Typeable a
+
+    , Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , ToJSON (Context a), FromJSON (Context a)
+
+    , Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , ToJSON (Name a), FromJSON (Name a)
+
+    ) => WebSocket -> Callbacks (Discussion a) -> Callbacks (Meta a) -> Callbacks (Mods a) ->  IO (IO ())
+unauthenticatedEndpoints = Convoker.unauthenticatedEndpoints 
+
+authenticatedEndpoints 
+  :: forall a. 
+    ( Typeable a
+
+    , Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , ToJSON (Context a), FromJSON (Context a)
+
+    , Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , ToJSON (Name a), FromJSON (Name a)
+
+    , Nameable (Comment a)
+    , Previewable (Comment a)
+    , Processable (Comment a)
+    , Producible (Comment a)
+    , Previewable (Meta a)
+    , Processable (Meta a)
+    , Producible  (Meta a)
+      
+    ) => WebSocket 
+      -> Username 
+      -> Callbacks (Discussion a) 
+      -> Callbacks (Comment a)
+      -> Callbacks (Meta a)
+      -> Callbacks (Mods a)
+      -> Callbacks (UserVotes a)
+      -> IO (IO ())
+authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks = 
+  Convoker.authenticatedEndpoints ws un
+    (commentPermissions un)
+    metaPermissions
+    discussionCallbacks 
+    (extendCommentCallbacks readPermissions discussionCallbacks commentCallbacks)
+    metaCallbacks 
+    modsCallbacks 
+    userVotesCallbacks 
+    commentInteractions
+    metaInteractions
 
 threaded 
   :: forall _role a b. 
@@ -116,7 +216,7 @@ instance (Typeable a, ToJSON (Context a), FromJSON (Context a), ToJSON (Name a),
     | Just True <- v = pure mdl
     | otherwise = do
       request (publishingAPI @(UserVotes a)) socket (amendResource @(UserVotes a)) 
-        (UserVotesContext context name,UserVotesName username,UserVotes.Upvote key) def
+        (UserVotesContext context name,UserVotesName username,Convoker.Upvote key) def
       pure (mdl :: Model (SimpleVotes a))
         { votes = votes + 1
         , vote = case v of
@@ -129,7 +229,7 @@ instance (Typeable a, ToJSON (Context a), FromJSON (Context a), ToJSON (Name a),
     | Just False <- v = pure mdl
     | otherwise = do
       request (publishingAPI @(UserVotes a)) socket (amendResource @(UserVotes a)) 
-        (UserVotesContext context name,UserVotesName username,UserVotes.Downvote key) def
+        (UserVotesContext context name,UserVotesName username,Convoker.Downvote key) def
       pure (mdl  :: Model (SimpleVotes a))
         { votes = votes - 1
         , vote = case v of
@@ -142,23 +242,24 @@ instance (Typeable a, ToJSON (Context a), FromJSON (Context a), ToJSON (Name a),
     | Nothing <- v = pure mdl 
     | Just True <- v = do
       request (publishingAPI @(UserVotes a)) socket (amendResource @(UserVotes a))
-        (UserVotesContext context name,UserVotesName username,UserVotes.Downvote key) def
+        (UserVotesContext context name,UserVotesName username,Convoker.Downvote key) def
       pure (mdl :: Model (SimpleVotes a))
         { votes = votes - 1 
         , vote = Nothing
         }
     | Just False <- v = do
       request (publishingAPI @(UserVotes a)) socket (amendResource @(UserVotes a))
-        (UserVotesContext context name,UserVotesName username,UserVotes.Upvote key) def
+        (UserVotesContext context name,UserVotesName username,Convoker.Upvote key) def
       pure (mdl :: Model (SimpleVotes a))
         { votes = votes + 1 
         , vote = Nothing
         }
 
   view _ SimpleVotesModel {..} 
-    | Just _ <- vote = Span <||> [ Button <| OnClick (\_ -> command Unvote) |> [ "Unvote" ] ]
+    | Just _ <- vote = Span <||> [ txt (total votes), Button <| OnClick (\_ -> command Unvote) |> [ "Unvote" ] ]
     | otherwise =
       Span <||>
         [ Button <| OnClick (\_ -> command Upvote)   |> [ "Upvote" ]
+        , txt (total votes)
         , Button <| OnClick (\_ -> command Downvote) |> [ "Downvote" ]
         ]

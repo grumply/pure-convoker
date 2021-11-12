@@ -27,6 +27,7 @@ library
     , pure-maybe
     , pure-render
     , pure-router
+    , pure-sorcerer
     , pure-sync
     , pure-tagsoup
     , pure-txt

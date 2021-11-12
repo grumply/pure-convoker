@@ -4,12 +4,15 @@ module Pure.Convoker.Discussion.Threaded.Meta
   , Product(..)
   , Preview(..)
   , Amend(..)
-  , metaCallbacks 
+  , Action(..)
+  , Reaction(..)
+  , trySetVote
   , metaPermissions
   , metaInteractions
+  , userVotesCallbacks
   ) where
 
-import Pure.Auth
+import Pure.Auth hiding (Key)
 import Pure.Convoker.Comment
 import Pure.Convoker.Meta
 import Pure.Convoker.Mods
@@ -22,6 +25,7 @@ import Pure.Data.JSON
 import Data.Hashable
 
 import Data.List as List
+import Data.Maybe
 import Data.Typeable
 import GHC.Generics hiding (Meta)
 
@@ -87,20 +91,28 @@ instance Amendable (Meta a) where
       , ..
       }
 
-data instance Action (Meta a)
-data instance Reaction (Meta a) 
+data instance Action (Meta a) = NoMetaAction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+data instance Reaction (Meta a) = NoMetaReaction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+
+trySetVote 
+  :: ( Typeable a 
+     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
+     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
+     )
+    => Permissions (Meta a) -> Callbacks (Meta a) -> Context a -> Name a -> Username -> Key (Comment a) -> Int -> IO Bool
+trySetVote permissions callbacks ctx nm un k v = fmap isJust do
+  tryAmend permissions callbacks (MetaContext ctx nm) MetaName
+    (SetVote (Vote un k v))
+
+metaPermissions :: Permissions (Meta a)
+metaPermissions = readPermissions
 
 metaInteractions :: Typeable a => Interactions (Meta a)
 metaInteractions = def
-
-metaPermissions :: Username -> Permissions (Meta a)
-metaPermissions un = readPermissions { canAmend = canAmend' }
-  where
-    canAmend' _ _ = \case
-      SetVote (Vote _ _ _) -> pure True
-    
-metaCallbacks :: Callbacks (Meta a)
-metaCallbacks = def
 
 userVotesCallbacks 
   :: ( Typeable a

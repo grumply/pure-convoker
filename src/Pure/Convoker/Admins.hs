@@ -61,14 +61,14 @@ instance Nameable Admins where
 instance Processable Admins
 
 instance Amendable Admins where
-  data Amend Admins = Add Username | Remove Username
+  data Amend Admins = AddAdmin Username | RemoveAdmin Username
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-  amend (Add un) RawAdmins {..} | un `notElem` admins = 
+  amend (AddAdmin un) RawAdmins {..} | un `notElem` admins = 
     Just RawAdmins { admins = un : admins }
 
-  amend (Remove un) RawAdmins {..} | un `elem` admins, List.length admins > 1, List.last admins /= un = 
+  amend (RemoveAdmin un) RawAdmins {..} | un `elem` admins, List.length admins > 1, List.last admins /= un = 
     Just RawAdmins { admins = List.filter (/= un) admins }
 
   amend _ _ = 
@@ -81,12 +81,12 @@ tryCreateAdmins admins = fmap isJust do
 tryAddAdmin :: Permissions Admins -> Callbacks Admins -> Username -> IO Bool
 tryAddAdmin permissions callbacks un = fmap isJust do
   tryAmend permissions callbacks AdminsContext AdminsName 
-    (Add un)
+    (AddAdmin un)
 
 tryRemoveAdmin :: Permissions Admins -> Callbacks Admins -> Username -> IO Bool
 tryRemoveAdmin permissions callbacks un = fmap isJust do
   tryAmend permissions callbacks AdminsContext AdminsName
-    (Remove un)
+    (RemoveAdmin un)
 
 adminsPermissions :: Username -> Permissions Admins
 adminsPermissions un = readPermissions { canAmend = canAmend' }
