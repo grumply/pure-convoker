@@ -7,7 +7,7 @@ import Pure.Convoker.Mods as Export
 import Pure.Convoker.Admins as Export
 import Pure.Convoker.UserVotes as Export
 
-import Pure.Auth (Token(..),Username)
+import Pure.Auth (Username)
 import Pure.Conjurer
 import Pure.Data.JSON hiding (Null)
 import Pure.Elm.Component (View,Default(..),pattern Null)
@@ -49,9 +49,8 @@ convoke = concat
   ]
 
 endpoints 
-  :: forall _role a. 
-    ( Typeable _role
-    , Typeable a
+  :: forall a. 
+    ( Typeable a
 
     , Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -80,7 +79,7 @@ endpoints
     , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
 
     ) => WebSocket
-      -> Maybe (Token _role) 
+      -> Maybe Username
       -> Permissions (Comment a) 
       -> Permissions (Meta a) 
       -> Callbacks (Discussion a) 
@@ -91,11 +90,11 @@ endpoints
       -> Interactions (Comment a) 
       -> Interactions (Meta a)
       -> View
-endpoints ws mt commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions = 
-  useEffectWith' (effect mt) mt Null
+endpoints ws mu commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions = 
+  useEffectWith' (effect mu) mu Null
   where
     effect = \case
-      Just (Token (un,_)) -> authenticatedEndpoints ws un commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions
+      Just un -> authenticatedEndpoints ws un commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions
       _ -> unauthenticatedEndpoints ws discussionCallbacks metaCallbacks modsCallbacks
 
 -- | This should be considered an extensible API for managing an unauthenticated

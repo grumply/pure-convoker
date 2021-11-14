@@ -11,6 +11,7 @@ module Pure.Convoker.Admins
   , adminsPermissions
   , adminsCallbacks
   , isAdmin
+  , adminPermissions
   ) where
 
 import Pure.Auth (Username)
@@ -101,3 +102,15 @@ isAdmin un =
   tryReadProduct fullPermissions def AdminsContext AdminsName >>= \case
     Just Admins {..} | un `elem` admins -> pure True
     _ -> pure False
+
+adminPermissions :: Username -> Permissions resource
+adminPermissions un = Permissions {..}
+  where
+    canRead     ctx nm      = isAdmin un
+    canCreate   ctx nm res  = isAdmin un
+    canUpdate   ctx nm      = isAdmin un
+    canAmend    ctx nm amnd = isAdmin un
+    canInteract ctx nm actn = isAdmin un
+    canDelete   ctx nm      = isAdmin un
+    canList     ctx         = isAdmin un
+   
