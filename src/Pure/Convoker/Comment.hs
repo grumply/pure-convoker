@@ -86,7 +86,7 @@ data instance Name (Comment a) = CommentName (Key (Comment a))
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
 instance Previewable (Comment a) where
-  preview _ _ Comment {..} = pure CommentPreview {..}
+  preview _ _ _ _ Comment {..} = pure CommentPreview {..}
 
 canEditComment 
   :: ( Typeable a

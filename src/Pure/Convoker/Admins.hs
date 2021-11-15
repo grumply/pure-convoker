@@ -51,10 +51,10 @@ data instance Name Admins = AdminsName
 instance Routable Admins
 
 instance Producible Admins where
-  produce _ RawAdmins {..} = pure Admins {..}
+  produce _ _ _ RawAdmins {..} = pure Admins {..}
 
 instance Previewable Admins where
-  preview _ _ _ = pure NoAdminsPreview
+  preview _ _ _ _ _ = pure NoAdminsPreview
 
 instance Nameable Admins where
   toName _ = AdminsName

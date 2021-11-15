@@ -135,7 +135,7 @@ instance Amendable (UserVotes a) where
 instance Processable (UserVotes a)
 
 instance Producible (UserVotes a) where
-  produce _ RawUserVotes {..} = do
+  produce _ _ _ RawUserVotes {..} = do
     upvotes' <- new 0.0001 (List.length upvotes)
     for_ upvotes (add upvotes')
 
@@ -145,7 +145,7 @@ instance Producible (UserVotes a) where
     pure (UserVotes username upvotes' downvotes')
 
 instance Previewable (UserVotes a) where
-  preview _ _ _ = pure NoUserVotesPreview
+  preview _ _ _ _ _ = pure NoUserVotesPreview
 
 data instance Action (UserVotes a) = NoUserVotesAction
   deriving stock Generic

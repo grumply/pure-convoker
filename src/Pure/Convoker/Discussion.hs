@@ -87,11 +87,11 @@ deriving instance (FromJSON (Product (Comment a)), FromJSON (Preview (Comment a)
 instance Processable (Discussion a)
 
 instance Producible (Discussion a) where
-  produce _ RawDiscussion {..} =
+  produce _ _ _ RawDiscussion {..} =
     pure Discussion { comments = fmap fst comments, .. }
 
 instance Previewable (Discussion a) where
-  preview _ RawDiscussion {..} _ =
+  preview _ _ _ RawDiscussion {..} _ =
     pure DiscussionPreview { comments = fmap snd comments, .. }
 
 data instance Action (Discussion a) = NoDiscussionAction

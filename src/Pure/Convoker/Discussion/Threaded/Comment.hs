@@ -119,7 +119,7 @@ instance Processable (Comment a) where
 
 -- This can be overridden with incoherent instances to customize processing!
 instance Producible (Comment a) where
-  produce _ RawComment {..} =
+  produce _ _ _ RawComment {..} =
     pure Comment
       { content = if deleted then [ "[ removed ]" ] else parseMarkdown content
       , ..
