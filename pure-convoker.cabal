@@ -36,7 +36,10 @@ library
     , pure-xss-sanitize
     , containers
     , hashable
-    , pandoc
+    
+  if !(impl(ghcjs))
+    build-depends:
+      pandoc
 
   exposed-modules:
     Pure.Convoker

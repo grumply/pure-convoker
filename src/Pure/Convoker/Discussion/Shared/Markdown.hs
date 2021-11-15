@@ -14,19 +14,25 @@ import Pure.Data.Txt (Txt,ToTxt(..),FromTxt(..))
 import Pure.Elm.Component (View)
 import Pure.TagSoup (parseView)
 import qualified Pure.Data.View.SanitizeXSS as Sanitize
+
+#ifndef __GHCJS__
 import Text.Pandoc.Class (runPure)
 import Text.Pandoc.Readers.Markdown (readMarkdown)
 import Text.Pandoc.Writers.HTML (writeHtml5String)
 import Text.Pandoc.Options as Pandoc (def,ReaderOptions(..),pandocExtensions)
-
-newtype Markdown = Markdown Txt
-  deriving (ToJSON,FromJSON,ToTxt,FromTxt) via Txt
 
 unsafeRender :: Txt -> [View]
 unsafeRender md = either (const []) id $ runPure $ do
   one <- readMarkdown Pandoc.def { readerExtensions = pandocExtensions } md
   two <- writeHtml5String Pandoc.def one
   pure (parseView two)
+#else
+unsafeRender :: Txt -> [View]
+unsafeRender md = []
+#endif
+
+newtype Markdown = Markdown Txt
+  deriving (ToJSON,FromJSON,ToTxt,FromTxt) via Txt
 
 parseMarkdown :: Markdown -> [View]
 parseMarkdown = maybe [] id . unsafePerformIO . timeout 3000000 . evaluate . fmap (Sanitize.sanitize opts) . unsafeRender . toTxt
