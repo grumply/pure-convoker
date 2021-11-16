@@ -61,6 +61,9 @@ instance Nameable Admins where
 
 instance Processable Admins
 
+instance Ownable Admins where
+  isOwner un _ _ = isAdmin un
+
 instance Amendable Admins where
   data Amend Admins = AddAdmin Username | RemoveAdmin Username
     deriving stock Generic
@@ -74,6 +77,14 @@ instance Amendable Admins where
 
   amend _ _ = 
     Nothing
+
+data instance Action Admins = NoAdminsAction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
+
+data instance Reaction Admins = NoAdminsReaction
+  deriving stock Generic
+  deriving anyclass (ToJSON,FromJSON)
 
 tryCreateAdmins :: [Username] -> IO Bool
 tryCreateAdmins admins = fmap isJust do
@@ -113,4 +124,6 @@ adminPermissions un = Permissions {..}
     canInteract ctx nm actn = isAdmin un
     canDelete   ctx nm      = isAdmin un
     canList     ctx         = isAdmin un
-   
+
+adminsInteractions :: Interactions Admins
+adminsInteractions = def 
