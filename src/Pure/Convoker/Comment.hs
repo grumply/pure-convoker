@@ -8,6 +8,7 @@ module Pure.Convoker.Comment
   ) where
 
 import Pure.Convoker.Mods
+import Pure.Convoker.Admins
 
 import Pure.Auth (Username)
 import Pure.Conjurer
@@ -72,6 +73,9 @@ data instance Preview (Comment a) = CommentPreview
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
+instance Ownable (Comment a) where 
+  isOwner un _ _ = isAdmin un
+
 data instance Context (Comment a) = CommentContext (Context a) (Name a)
   deriving stock Generic
 deriving instance (Eq (Context a),Eq (Name a)) => Eq (Context (Comment a))
@@ -94,6 +98,6 @@ canEditComment
      , Pathable (Name a), Hashable (Name a)
      ) => Context a -> Name a -> Key (Comment a) -> Username -> IO Bool
 canEditComment ctx nm k un = 
-  tryReadProduct fullPermissions def (CommentContext ctx nm) (CommentName k) >>= \case
+  tryReadProduct fullPermissions (callbacks (Just un)) (CommentContext ctx nm) (CommentName k) >>= \case
     Just Comment {..} | author == un -> pure True
     _ -> isMod (ModsContext ctx) un

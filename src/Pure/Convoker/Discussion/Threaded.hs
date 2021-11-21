@@ -27,55 +27,6 @@ import Data.Maybe
 import Data.Typeable
 import System.IO.Unsafe
 
-endpoints 
-  :: forall _role a.
-    ( Typeable _role
-    , Typeable a
-    
-    , Pathable (Context a), Hashable (Context a), Ord (Context a)
-    , ToJSON (Context a), FromJSON (Context a)
-
-    , Pathable (Name a), Hashable (Name a), Ord (Name a)
-    , ToJSON (Name a), FromJSON (Name a)
-    
-    , Nameable (Comment a)
-    , Previewable (Comment a)
-    , Processable (Comment a)
-    , Producible (Comment a)
-    , Previewable (Meta a)
-    , Processable (Meta a)
-    , Producible  (Meta a)
-      
-    ) => WebSocket
-      -> Maybe (Token _role)
-      -> Callbacks (Discussion a) 
-      -> Callbacks (Comment a)
-      -> Callbacks (Meta a)
-      -> Callbacks (Mods a)
-      -> Callbacks (UserVotes a)
-      -> View
-endpoints ws mt discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks = 
-  useEffectWith' (effect mt) mt Null
-  where
-    effect = \case
-      Just (Token (un,_)) -> 
-        Convoker.authenticatedEndpoints ws un 
-          (commentPermissions un) 
-          metaPermissions 
-          discussionCallbacks 
-          (extendCommentCallbacks readPermissions discussionCallbacks commentCallbacks) 
-          metaCallbacks 
-          modsCallbacks 
-          userVotesCallbacks
-          commentInteractions
-          metaInteractions
-
-      _ -> 
-        Convoker.unauthenticatedEndpoints ws 
-          discussionCallbacks 
-          metaCallbacks 
-          modsCallbacks
-
 unauthenticatedEndpoints
   :: forall a.
     ( Typeable a
@@ -117,43 +68,44 @@ authenticatedEndpoints
       -> IO (IO ())
 authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks = 
   Convoker.authenticatedEndpoints ws un
-    (commentPermissions un)
-    metaPermissions
+    (permissions (Just un))
+    (permissions (Just un))
     discussionCallbacks 
     (extendCommentCallbacks readPermissions discussionCallbacks commentCallbacks)
     metaCallbacks 
     modsCallbacks 
     userVotesCallbacks 
-    commentInteractions
-    metaInteractions
+    (interactions (Just un))
+    (interactions (Just un))
 
 threaded 
   :: forall _role a b. 
     ( Typeable a
     , Typeable (_role :: *)
-    , ToJSON (Context a), FromJSON (Context a), Eq (Context a)
-    , ToJSON (Name a), FromJSON (Name a), Eq (Name a)
+    , Theme (Comment a)
+    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
+    , Formable (Resource (Comment a))
+    , Default (Resource (Comment a))
+    , Component (Preview (Comment a))
+    , Component (Product (Comment a))
+    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
+    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
     , Ord b
     ) => WebSocket -> Context a -> Name a -> CommentSorter a b -> CommentViewer a -> View
-threaded ws ctx nm sorter viewer = discussion @_role ws ctx nm (threads sorter viewer)
-
-createDiscussion 
-  :: forall a. 
-    ( Typeable a
-    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
-    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-    ) => Context a -> Name a -> [Username] -> IO ()
-createDiscussion ctx nm mods = void do
-  tryCreate @(Discussion a) fullPermissions def (DiscussionContext ctx nm) (RawDiscussion ctx nm []) 
-  tryCreate @(Mods a) fullPermissions def (ModsContext ctx) (RawMods mods)
-  tryCreate @(Meta a) fullPermissions def (MetaContext ctx nm) (RawMeta (Votes []))
+threaded ws ctx nm sorter viewer = discussion @_role ws ctx nm (threads @_role sorter viewer)
 
 simpleThreaded 
   :: forall _role a. 
     ( Typeable a
     , Typeable (_role :: *)
-    , ToJSON (Context a), FromJSON (Context a), Eq (Context a)
-    , ToJSON (Name a), FromJSON (Name a), Eq (Name a)
+    , Theme (Comment a)
+    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
+    , Formable (Resource (Comment a))
+    , Default (Resource (Comment a))
+    , Component (Preview (Comment a))
+    , Component (Product (Comment a))
+    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
+    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
     ) => WebSocket -> Context a -> Name a -> View
 simpleThreaded ws ctx nm = threaded @_role ws ctx nm simpleSorter simpleComment 
 

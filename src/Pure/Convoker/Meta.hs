@@ -1,6 +1,7 @@
 module Pure.Convoker.Meta where
 
 import Pure.Convoker.Comment
+import Pure.Convoker.Admins
 
 import Pure.Auth (Username)
 import Pure.Conjurer
@@ -57,6 +58,9 @@ data instance Name (Meta a) = MetaName
 
 instance Nameable (Meta a) where
   toName _ = MetaName
+
+instance Ownable (Meta a) where
+  isOwner un _ _ = isAdmin un
 
 --------------------------------------------------------------------------------
 -- Simple anonymous vote totals.

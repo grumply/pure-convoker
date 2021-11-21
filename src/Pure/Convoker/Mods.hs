@@ -9,8 +9,7 @@ module Pure.Convoker.Mods
   , tryCreateMods
   , tryAddMod
   , tryRemoveMod
-  , modsPermissions
-  , modsInteractions
+  , modPermissions
   , isMod
   ) where
 
@@ -23,6 +22,7 @@ import Pure.Elm.Component
 
 import Data.Hashable
 
+import Control.Monad (liftM2)
 import Data.List as List
 import Data.Maybe
 import Data.Typeable
@@ -43,6 +43,9 @@ data instance Product (Mods a) = Mods
 data instance Preview (Mods a) = NoModsPreview
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
+
+instance (Pathable (Context a), Hashable (Context a), Typeable a) => Ownable (Mods a) where
+  isOwner un ctx _ = liftM2 (||) (isMod ctx un) (isAdmin un)
 
 data instance Context (Mods a) = ModsContext (Context a)
   deriving stock Generic
@@ -113,19 +116,16 @@ tryRemoveMod permissions callbacks ctx mod = fmap isJust do
   tryAmend permissions callbacks (ModsContext ctx) ModsName 
     (RemoveMod mod)
 
-modsInteractions :: Typeable a => Interactions (Mods a)
-modsInteractions = def
-
-modsPermissions 
+modPermissions 
   :: ( Typeable (a :: *)
      , Pathable (Context (Mods a)), Hashable (Context (Mods a))
      ) => Username -> Permissions (Mods a)
-modsPermissions un = readPermissions { canAmend = canAmend' }
+modPermissions un = readPermissions { canAmend = canAmend' }
   where
     canAmend' ctx _ _ = isMod ctx un
 
 isMod :: (Pathable (Context a), Hashable (Context a), Typeable a) => Context a -> Username -> IO Bool
 isMod ctx un =
-  tryReadProduct fullPermissions def (ModsContext ctx) ModsName >>= \case
+  tryReadProduct fullPermissions (callbacks (Just un)) (ModsContext ctx) ModsName >>= \case
     Just Mods {..} | un `elem` mods -> pure True
     _ -> isAdmin un

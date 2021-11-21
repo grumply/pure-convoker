@@ -1,5 +1,6 @@
 module Pure.Convoker (module Export, module Pure.Convoker) where
 
+import Pure.Convoker.Admins as Export
 import Pure.Convoker.Comment as Export
 import Pure.Convoker.Discussion as Export
 import Pure.Convoker.Meta as Export
@@ -18,6 +19,24 @@ import Pure.WebSocket
 import Data.Hashable
 
 import Data.Typeable
+
+type Convokable a = 
+  ( Pathable (Context a), Hashable (Context a)
+  , ToJSON (Context a), FromJSON (Context a)
+
+  , Pathable (Name a), Hashable (Name a)
+  , ToJSON (Name a), FromJSON (Name a)
+
+  , Amendable (Comment a)
+  , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
+  , ToJSON (Amend (Comment a)), FromJSON (Amend (Comment a))
+
+  , Amendable (Meta a)
+  , ToJSON (Resource (Meta a)), FromJSON (Resource (Meta a))
+  , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
+  , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
+  , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
+  ) 
 
 convoke
   :: forall a.
@@ -48,55 +67,6 @@ convoke = concat
   , conjure @(UserVotes a)
   ]
 
-endpoints 
-  :: forall a. 
-    ( Typeable a
-
-    , Pathable (Context a), Hashable (Context a), Ord (Context a)
-    , ToJSON (Context a), FromJSON (Context a)
-
-    , Pathable (Name a), Hashable (Name a), Ord (Name a)
-    , ToJSON (Name a), FromJSON (Name a)
-
-    , Nameable (Comment a)
-    , Processable (Comment a)
-    , Producible (Comment a)
-    , Amendable (Comment a)
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , ToJSON (Action (Comment a)), FromJSON (Action (Comment a))
-    , ToJSON (Reaction (Comment a)), FromJSON (Reaction (Comment a))
-    , ToJSON (Amend (Comment a)), FromJSON (Amend (Comment a))
-
-    , Processable (Meta a)
-    , Producible (Meta a)
-    , Previewable (Meta a)
-    , Amendable (Meta a)
-    , ToJSON (Resource (Meta a)), FromJSON (Resource (Meta a))
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
-    , ToJSON (Action (Meta a)), FromJSON (Action (Meta a))
-    , ToJSON (Reaction (Meta a)), FromJSON (Reaction (Meta a))
-    , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
-
-    ) => WebSocket
-      -> Maybe Username
-      -> Permissions (Comment a) 
-      -> Permissions (Meta a) 
-      -> Callbacks (Discussion a) 
-      -> Callbacks (Comment a)
-      -> Callbacks (Meta a)
-      -> Callbacks (Mods a)
-      -> Callbacks (UserVotes a)
-      -> Interactions (Comment a) 
-      -> Interactions (Meta a)
-      -> View
-endpoints ws mu commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions = 
-  useEffectWith' (effect mu) mu Null
-  where
-    effect = \case
-      Just un -> authenticatedEndpoints ws un commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions
-      _ -> unauthenticatedEndpoints ws discussionCallbacks metaCallbacks modsCallbacks
-
 -- | This should be considered an extensible API for managing an unauthenticated
 -- user's discussion endpoints. You can choose to satisfy some of the 
 -- constraints and partially apply this function and thereby reduce the required
@@ -123,9 +93,9 @@ unauthenticatedEndpoints
 
     ) => WebSocket -> Callbacks (Discussion a) -> Callbacks (Meta a) -> Callbacks (Mods a) ->  IO (IO ())
 unauthenticatedEndpoints socket discussionCallbacks metaCallbacks modsCallbacks = do
-  discussion <- enact socket (cachingReading @(Discussion a) readPermissions discussionCallbacks)
-  meta       <- enact socket (cachingReading @(Meta a) readPermissions metaCallbacks)
-  mods       <- enact socket (cachingReading @(Mods a) readPermissions modsCallbacks)
+  discussion <- enact socket (reading @(Discussion a) readPermissions discussionCallbacks)
+  meta       <- enact socket (reading @(Meta a) readPermissions metaCallbacks)
+  mods       <- enact socket (reading @(Mods a) readPermissions modsCallbacks)
   pure do
     repeal discussion
     repeal meta
@@ -196,6 +166,11 @@ authenticatedEndpoints
     , ToJSON (Reaction (Meta a)), FromJSON (Reaction (Meta a))
     , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
 
+    , DefaultPermissions (Mods a)
+    , DefaultPermissions (UserVotes a)
+
+    , DefaultCallbacks (UserVotes a) 
+
     ) => WebSocket 
       -> Username 
       -> Permissions (Comment a) 
@@ -216,16 +191,16 @@ authenticatedEndpoints socket un commentPermissions metaPermissions discussionCa
   --     discussions are manually created when their linked resource 
   --     is created.
 
-  discussionReading   <- enact socket (cachingReading @(Discussion a) readPermissions discussionCallbacks)
+  discussionReading   <- enact socket (reading @(Discussion a) readPermissions discussionCallbacks)
   commentReading      <- enact socket (reading @(Comment a) commentPermissions commentCallbacks)
-  metaReading         <- enact socket (cachingReading @(Meta a) metaPermissions metaCallbacks)
-  modsReading         <- enact socket (cachingReading @(Mods a) readPermissions modsCallbacks)
-  userVotesReading    <- enact socket (reading @(UserVotes a) (userVotesPermissions un) userVotesCallbacks)
+  metaReading         <- enact socket (reading @(Meta a) metaPermissions metaCallbacks)
+  modsReading         <- enact socket (reading @(Mods a) readPermissions modsCallbacks)
+  userVotesReading    <- enact socket (reading @(UserVotes a) (permissions (Just un)) userVotesCallbacks)
 
   commentPublishing   <- enact socket (publishing @(Comment a) commentPermissions commentCallbacks commentInteractions)
-  metaPublishing      <- enact socket (cachingPublishing @(Meta a) metaPermissions metaCallbacks metaInteractions)
-  modsPublishing      <- enact socket (cachingPublishing @(Mods a) (modsPermissions un) modsCallbacks modsInteractions)
-  userVotesPublishing <- enact socket (publishing @(UserVotes a) (userVotesPermissions un) userVotesCallbacks userVotesInteractions)
+  metaPublishing      <- enact socket (publishing @(Meta a) metaPermissions metaCallbacks metaInteractions)
+  modsPublishing      <- enact socket (publishing @(Mods a) (permissions (Just un)) modsCallbacks (interactions (Just un)))
+  userVotesPublishing <- enact socket (publishing @(UserVotes a) (permissions (Just un)) userVotesCallbacks (interactions (Just un)))
 
   pure do
     repeal discussionReading

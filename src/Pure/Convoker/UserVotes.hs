@@ -6,8 +6,6 @@ module Pure.Convoker.UserVotes
   , Context(..)
   , Name(..)
   , Amend(..)
-  , userVotesInteractions
-  , userVotesPermissions
   , emptyUserVotes
   , tryUpvote
   , tryDownvote
@@ -96,6 +94,9 @@ data instance Name (UserVotes a) = UserVotesName Username
 instance Nameable (UserVotes a) where
   toName RawUserVotes {..} = UserVotesName username
 
+instance Ownable (UserVotes a) where
+  isOwner un ctx (UserVotesName un') = pure (un == un')
+
 instance Amendable (UserVotes a) where
   data Amend (UserVotes a)
     = Upvote   (Key (Comment a)) 
@@ -154,13 +155,25 @@ data instance Reaction (UserVotes a) = NoUserVotesReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-userVotesInteractions :: Typeable a => Interactions (UserVotes a)
-userVotesInteractions = def
-
-userVotesPermissions :: Typeable a => Username -> Permissions (UserVotes a)
-userVotesPermissions un = readPermissions { canAmend = canAmend' }
+instance 
+  ( Typeable a
+  , ToJSON (Context a), FromJSON (Context a), Hashable (Context a), Pathable (Context a), Ord (Context a)
+  , ToJSON (Name a), FromJSON (Name a), Hashable (Name a), Pathable (Name a), Ord (Name a)
+  ) => DefaultPermissions (UserVotes a) 
   where
-    canAmend' ctx (UserVotesName user) _ = pure (user == un)
+    permissions Nothing = noPermissions
+    permissions (Just un) = readPermissions { canAmend = canAmend' }
+      where
+        canAmend' ctx (UserVotesName user) _ 
+          | user == un = do
+            tryReadResource (permissions (Just un)) (callbacks (Just un)) ctx (UserVotesName un) >>= \case
+              Nothing -> void do
+                tryCreate fullPermissions (callbacks (Just un)) ctx (RawUserVotes un [] [])
+              Just _  ->
+                pure ()
+            pure True
+          | otherwise =
+            pure False
 
 emptyUserVotes :: Username -> Product (UserVotes a)
 emptyUserVotes un = unsafePerformIO do

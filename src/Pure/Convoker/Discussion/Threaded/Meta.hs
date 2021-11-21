@@ -7,9 +7,6 @@ module Pure.Convoker.Discussion.Threaded.Meta
   , Action(..)
   , Reaction(..)
   , trySetVote
-  , metaPermissions
-  , metaInteractions
-  , userVotesCallbacks
   ) where
 
 import Pure.Auth hiding (Key)
@@ -62,6 +59,9 @@ data instance Resource (Meta a) = RawMeta
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
+instance Default (Resource (Meta a)) where
+  def = RawMeta (Votes [])
+
 data instance Product (Meta a) = Meta
   { votes :: Votes a
   } deriving stock Generic
@@ -108,24 +108,21 @@ trySetVote permissions callbacks ctx nm un k v = fmap isJust do
   tryAmend permissions callbacks (MetaContext ctx nm) MetaName
     (SetVote (Vote un k v))
 
-metaPermissions :: Permissions (Meta a)
-metaPermissions = readPermissions
-
-metaInteractions :: Typeable a => Interactions (Meta a)
-metaInteractions = def
-
-userVotesCallbacks 
-  :: ( Typeable a
-     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
-     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-     ) => Permissions (Meta a) -> Callbacks (Meta a) -> Callbacks (UserVotes a)
-userVotesCallbacks metaPermissions metaCallbacks = def { onAmend = onAmend' }
+instance 
+  ( Typeable a
+  , DefaultPermissions (Meta a), DefaultCallbacks (Meta a)
+  , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
+  , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
+  ) => DefaultCallbacks (UserVotes a) 
   where
-    onAmend' (UserVotesContext ctx nm) (UserVotesName un) res pro pre = \case
-      Upvote comment -> void do
-        tryAmend metaPermissions metaCallbacks (MetaContext ctx nm) MetaName 
-          (SetVote (Vote un comment 1))
+    callbacks Nothing = def
+    callbacks (Just un) = def { onAmend = onAmend' }
+      where
+        onAmend' (UserVotesContext ctx nm) (UserVotesName un) res pro pre lst = \case
+          Upvote comment -> void do
+            tryAmend fullPermissions (callbacks (Just un)) (MetaContext ctx nm) MetaName 
+              (SetVote (Vote un comment 1))
 
-      Downvote comment -> void do
-        tryAmend metaPermissions metaCallbacks (MetaContext ctx nm) MetaName 
-          (SetVote (Vote un comment (-1)))
+          Downvote comment -> void do
+            tryAmend fullPermissions (callbacks (Just un)) (MetaContext ctx nm) MetaName 
+              (SetVote (Vote un comment (-1)))

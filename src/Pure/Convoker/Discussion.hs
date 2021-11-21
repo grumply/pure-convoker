@@ -22,6 +22,7 @@ import Data.Hashable
 import Control.Concurrent
 import Control.Monad
 import Data.List as List
+import Data.Maybe
 import qualified Data.Graph as G
 import Data.Typeable
 import GHC.Generics hiding (Meta)
@@ -102,6 +103,9 @@ data instance Reaction (Discussion a) = NoDiscussionReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
+instance Ownable (Discussion a) where
+  isOwner un _ _ = isAdmin un
+
 type DiscussionViewer a = WebSocket -> Context a -> Name a -> Maybe Username -> Refresher -> Maybe (Product Admins,Product (Mods a),Product (UserVotes a),Product (Meta a),Product (Discussion a)) -> View
 type Refresher = IO ()
 type CommentSorter a b = Ord b => Product (Meta a) -> Product (Comment a) -> b
@@ -138,23 +142,24 @@ discussion ws ctx nm viewer =
 
     producer mun (ctx,nm) = do
 
-      getAdmins :: IO (Maybe (Product Admins)) <- async do
+      getAdmins <- async do
         request (readingAPI @Admins) ws 
           (readProduct @Admins) 
           (AdminsContext,AdminsName)
 
-      getMods :: IO (Maybe (Product (Mods a))) <- async do
+      getMods <- async do
         request (readingAPI @(Mods a)) ws 
           (readProduct @(Mods a)) 
           (ModsContext ctx,ModsName)
      
-      getVotes :: IO (Maybe (Product (UserVotes a))) <-
-        flip (maybe (pure (pure (Just (emptyUserVotes (fromTxt def)))))) mun $ \un ->
-          async do
+      getVotes <- async do
+        maybe ($ Nothing)
+          (\un -> 
             request (readingAPI @(UserVotes a)) ws
               (readProduct @(UserVotes a))
               (UserVotesContext ctx nm,UserVotesName un)
-     
+          ) mun
+ 
       getMeta <- async do
         request (readingAPI @(Meta a)) ws 
           (readProduct @(Meta a)) 
@@ -166,15 +171,31 @@ discussion ws ctx nm viewer =
           (DiscussionContext ctx nm,DiscussionName)
 
       (admins,mods,votes,meta,discussion) <- (,,,,) <$> getAdmins <*> getMods <*> getVotes <*> getMeta <*> getDiscussion
-      pure ((,,,,) <$> admins <*> mods <*> votes <*> meta <*> discussion)
+      pure ((,,,,) <$> admins <*> mods <*> pure (fromMaybe (emptyUserVotes (fromTxt def)) votes) <*> meta <*> discussion)
 
 -- A simple approach using the components of a transposed graph of comments.
 -- Takes a comment sorter that can define an arbitrary sort based on Ord using
 -- the comment and the discussion's meta information.
-threads :: Ord b => CommentSorter a b -> CommentViewer a -> DiscussionViewer a
-threads _ _ _ _ _ _ _ Nothing = Pure.Null
+threads 
+  :: forall (_role :: *) a b. 
+    ( Typeable a
+    , Typeable _role
+    , Theme (Comment a)
+    , Pathable (Context a), ToJSON (Context a), FromJSON (Context a)
+    , Pathable (Name a), ToJSON (Name a), FromJSON (Name a)
+    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
+    , Formable (Resource (Comment a))
+    , Default (Resource (Comment a))
+    , Component (Preview (Comment a))
+    , Component (Product (Comment a))
+    , Ord b
+    ) => CommentSorter a b -> CommentViewer a -> DiscussionViewer a
+threads _ _ _ _ _ _ _ Nothing = "Nothing in threads"
 threads sorter viewer ws ctx nm mun refresh (Just (admins,mods,votes,meta,Discussion {..})) = 
-  Div <||> forest Nothing threads
+  Div <||> 
+    [ toCreate @_role ws (CommentContext ctx nm)
+    , Div <||> forest Nothing threads
+    ]
   where
     edges = fmap (\(comment@Comment { key, parents }) -> (comment,key,parents)) comments
     
@@ -200,16 +221,57 @@ extendCommentCallbacks
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
     ) => Permissions (Discussion a) -> Callbacks (Discussion a) -> Callbacks (Comment a) -> Callbacks (Comment a)
 extendCommentCallbacks discussionPermissions discussionCallbacks cbs = cbs
-  { onCreate = \(CommentContext ctx nm) cnm res pro pre -> void do
-    onCreate cbs (CommentContext ctx nm) cnm res pro pre
+  { onCreate = \(CommentContext ctx nm) cnm res pro pre lst -> void do
+    onCreate cbs (CommentContext ctx nm) cnm res pro pre lst
     tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
   
-  , onUpdate = \(CommentContext ctx nm) cnm res pro pre -> void do
-    onUpdate cbs (CommentContext ctx nm) cnm res pro pre
+  , onUpdate = \(CommentContext ctx nm) cnm res pro pre lst -> void do
+    onUpdate cbs (CommentContext ctx nm) cnm res pro pre lst
     tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
-
   }
+
+createDiscussion 
+  :: forall a. 
+    ( Typeable a
+    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , Default (Resource (Meta a))
+    , Amendable (Meta a)
+    , Processable (Meta a)
+    , Previewable (Meta a)
+    , Producible (Meta a)
+    , FromJSON (Resource (Meta a)), ToJSON (Resource (Meta a))
+    , FromJSON (Product (Meta a)), ToJSON (Product (Meta a))
+    , FromJSON (Preview (Meta a)), ToJSON (Preview (Meta a))
+    , FromJSON (Amend (Meta a)), ToJSON (Amend (Meta a))
+    ) => Context a -> Name a -> [Username] -> IO ()
+createDiscussion ctx nm mods = void do
+  tryCreate @(Discussion a) fullPermissions def (DiscussionContext ctx nm) (RawDiscussion ctx nm []) 
+  tryCreate @(Mods a) fullPermissions def (ModsContext ctx) (RawMods mods)
+  tryCreate @(Meta a) fullPermissions def (MetaContext ctx nm) (def :: Resource (Meta a))
+
+addDiscussionCreationCallbacks 
+  :: forall a. 
+    ( Typeable a
+    , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , Default (Resource (Meta a))
+    , Amendable (Meta a)
+    , Processable (Meta a)
+    , Previewable (Meta a)
+    , Producible (Meta a)
+    , FromJSON (Resource (Meta a)), ToJSON (Resource (Meta a))
+    , FromJSON (Product (Meta a)), ToJSON (Product (Meta a))
+    , FromJSON (Preview (Meta a)), ToJSON (Preview (Meta a))
+    , FromJSON (Amend (Meta a)), ToJSON (Amend (Meta a))
+    ) => [Username] -> Callbacks a -> Callbacks a
+addDiscussionCreationCallbacks mods cbs = cbs { onCreate = onCreate' }
+  where
+    onCreate' ctx nm res pro pre lst = do
+      createDiscussion ctx nm mods
+      onCreate cbs ctx nm res pro pre lst
+

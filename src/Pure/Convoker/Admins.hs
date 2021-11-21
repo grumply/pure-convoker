@@ -8,8 +8,6 @@ module Pure.Convoker.Admins
   , tryCreateAdmins
   , tryAddAdmin
   , tryRemoveAdmin
-  , adminsPermissions
-  , adminsCallbacks
   , isAdmin
   , adminPermissions
   ) where
@@ -21,6 +19,7 @@ import Pure.Data.JSON
 
 import Data.Hashable
 
+import Control.Monad (liftM2)
 import Data.List as List
 import Data.Maybe
 import GHC.Generics
@@ -86,9 +85,15 @@ data instance Reaction Admins = NoAdminsReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
+instance DefaultPermissions Admins where
+  permissions Nothing = readPermissions
+  permissions (Just un) = readPermissions { canAmend = canAmend' }
+    where
+      canAmend' _ _ _ = isAdmin un
+
 tryCreateAdmins :: [Username] -> IO Bool
 tryCreateAdmins admins = fmap isJust do
-  tryCreate fullPermissions def AdminsContext (RawAdmins admins)
+  tryCreate fullPermissions (callbacks Nothing) AdminsContext (RawAdmins admins)
 
 tryAddAdmin :: Permissions Admins -> Callbacks Admins -> Username -> IO Bool
 tryAddAdmin permissions callbacks un = fmap isJust do
@@ -100,19 +105,14 @@ tryRemoveAdmin permissions callbacks un = fmap isJust do
   tryAmend permissions callbacks AdminsContext AdminsName
     (RemoveAdmin un)
 
-adminsPermissions :: Username -> Permissions Admins
-adminsPermissions un = readPermissions { canAmend = canAmend' }
-  where
-    canAmend' _ _ _ = isAdmin un
-
-adminsCallbacks :: Callbacks Admins
-adminsCallbacks = def
-
 isAdmin :: Username -> IO Bool
 isAdmin un = 
-  tryReadProduct fullPermissions def AdminsContext AdminsName >>= \case
+  tryReadProduct readPermissions (callbacks Nothing) AdminsContext AdminsName >>= \case
     Just Admins {..} | un `elem` admins -> pure True
     _ -> pure False
+
+defaultIsOwner :: Ownable a => Username -> Context a -> Name a -> IO Bool
+defaultIsOwner un ctx nm = liftM2 (||) (isOwner un ctx nm) (isAdmin un)
 
 adminPermissions :: Username -> Permissions resource
 adminPermissions un = Permissions {..}
@@ -125,5 +125,6 @@ adminPermissions un = Permissions {..}
     canDelete   ctx nm      = isAdmin un
     canList     ctx         = isAdmin un
 
-adminsInteractions :: Interactions Admins
-adminsInteractions = def 
+-- This is dangerous from a referntiality perspective, but awfully convenient.
+instance {-# INCOHERENT #-} Ownable x where
+  isOwner un _ _ = isAdmin un

@@ -4,8 +4,6 @@ module Pure.Convoker.Discussion.Threaded.Comment
   , Amend(..)
   , Action(..)
   , Reaction(..)
-  , commentPermissions
-  , commentInteractions
   , canEditComment
   ) where
 
@@ -23,6 +21,8 @@ import Data.Hashable
 import Data.List as List
 import Data.Typeable
 import GHC.Generics
+
+import System.IO.Unsafe
 
 {-
 Design notes:
@@ -64,6 +64,18 @@ data instance Resource (Comment a) = RawComment
   , content  :: Markdown
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
+
+-- the key, author, and creation time are replaced on the server
+instance Default (Resource (Comment a)) where
+  def = RawComment 
+    { author   = fromTxt ""
+    , key      = unsafePerformIO newKey 
+    , parents  = []
+    , created  = unsafePerformIO time
+    , edited   = Nothing
+    , deleted  = False
+    , content  = Markdown ""
+    }
 
 instance Nameable (Comment a) where
   toName RawComment {..} = CommentName key
@@ -125,19 +137,22 @@ instance Producible (Comment a) where
       , ..
       }
 
-commentInteractions :: Typeable a => Interactions (Comment a)
-commentInteractions = def
-
-commentPermissions :: (Typeable a, Pathable (Context a), Pathable (Name a), Hashable (Context a), Hashable (Name a)) => Username -> Permissions (Comment a)
-commentPermissions un = 
-  readPermissions
-    { canCreate = \_ _ _ -> pure True
-    , canUpdate = canUpdate'
-    , canAmend  = canAmend'
-    }
+instance 
+  ( Typeable a 
+  , Pathable (Context a), Hashable (Context a)
+  , Pathable (Name a), Hashable (Name a)
+  ) => DefaultPermissions (Comment a) 
   where
-    canUpdate' (CommentContext ctx nm) (CommentName k) = canEditComment ctx nm k un
-    canAmend' (CommentContext ctx nm) (CommentName k) = \case
-      SetContent _ _ -> canEditComment ctx nm k un
-      _              -> isMod ctx un 
+    permissions Nothing = readPermissions
+    permissions (Just un) =
+      readPermissions
+        { canCreate = \_ _ _ -> pure True
+        , canUpdate = canUpdate'
+        , canAmend  = canAmend'
+        }
+      where
+        canUpdate' (CommentContext ctx nm) (CommentName k) = canEditComment ctx nm k un
+        canAmend' (CommentContext ctx nm) (CommentName k) = \case
+          SetContent _ _ -> canEditComment ctx nm k un
+          _              -> isMod ctx un 
 
