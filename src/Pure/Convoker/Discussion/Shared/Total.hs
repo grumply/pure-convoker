@@ -1,11 +1,11 @@
-module Pure.Convoker.Discussion.Shared.Total (total) where
+module Pure.Convoker.Discussion.Shared.Total (simplified) where
 
 import Pure.Elm.Component
 
 import Text.Printf
 
-total :: Int -> Txt
-total t
+simplified :: Int -> Txt
+simplified t
   | t < 1000 = toTxt t
   | otherwise =
     case t `divMod` 1000 of

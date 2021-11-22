@@ -1,4 +1,4 @@
-module Pure.Convoker.Discussion.Threaded.Meta
+module Pure.Convoker.Discussion.Simple.Meta
   ( Meta(..)
   , Resource(..)
   , Product(..)

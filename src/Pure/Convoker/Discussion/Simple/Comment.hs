@@ -1,4 +1,4 @@
-module Pure.Convoker.Discussion.Threaded.Comment 
+module Pure.Convoker.Discussion.Simple.Comment 
   ( Comment(..)
   , Resource(..)
   , Amend(..)
@@ -13,11 +13,12 @@ import Pure.Convoker.Discussion.Shared.Markdown
 
 import Pure.Auth (Username)
 import Pure.Conjurer
-import Pure.Data.JSON
+import Pure.Data.JSON (ToJSON,FromJSON)
 import Pure.Elm.Component hiding (pattern Delete,not)
 
 import Data.Hashable
 
+import Data.Coerce
 import Data.List as List
 import Data.Typeable
 import GHC.Generics
@@ -57,10 +58,10 @@ Design notes:
 data instance Resource (Comment a) = RawComment
   { author   :: Username
   , key      :: Key (Comment a)
-  , parents  :: [Key (Comment a)]
-  , created  :: Time
-  , edited   :: Maybe Time
-  , deleted  :: Bool
+  , parents  :: Parents a
+  , created  :: Created
+  , edited   :: Edited
+  , deleted  :: Deleted
   , content  :: Markdown
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
@@ -70,10 +71,10 @@ instance Default (Resource (Comment a)) where
   def = RawComment 
     { author   = fromTxt ""
     , key      = unsafePerformIO newKey 
-    , parents  = []
-    , created  = unsafePerformIO time
-    , edited   = Nothing
-    , deleted  = False
+    , parents  = Parents []
+    , created  = Created (unsafePerformIO time)
+    , edited   = Edited Nothing
+    , deleted  = Deleted False
     , content  = Markdown ""
     }
 
@@ -88,22 +89,22 @@ instance Amendable (Comment a) where
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-  amend (SetContent md t) RawComment {..} | not deleted = 
+  amend (SetContent md t) RawComment {..} | Deleted True <- deleted = 
     Just RawComment
       { content = md 
-      , edited = Just t
+      , edited = Edited (Just t)
       , ..
       }
       
-  amend Delete RawComment {..} | not deleted =
+  amend Delete RawComment {..} | Deleted False <- deleted =
     Just RawComment
-      { deleted = True
+      { deleted = Deleted True
       , ..
       }
 
-  amend Undelete RawComment {..} | deleted =
+  amend Undelete RawComment {..} | Deleted True <- deleted =
     Just RawComment
-      { deleted = False 
+      { deleted = Deleted False
       , ..
       }
 
@@ -119,13 +120,14 @@ data instance Reaction (Comment a) = NoCommentReaction
 
 instance Processable (Comment a) where
   process _ RawComment {..} = do
+    let Parents ps = parents
     t <- time
     k <- newKey
     pure $ Just RawComment
-      { created = t
-      , parents = List.take 1 parents
-      , edited = Nothing
-      , key = k 
+      { key = k 
+      , created = Created t
+      , parents = Parents (List.take 1 ps)
+      , edited = Edited Nothing
       , ..
       }
 
@@ -133,7 +135,7 @@ instance Processable (Comment a) where
 instance Producible (Comment a) where
   produce _ _ _ RawComment {..} =
     pure Comment
-      { content = if deleted then [ "[ removed ]" ] else parseMarkdown content
+      { content = if deleted == Deleted True then [ "[ removed ]" ] else parseMarkdown content
       , ..
       }
 
@@ -146,7 +148,7 @@ instance
     permissions Nothing = readPermissions
     permissions (Just un) =
       readPermissions
-        { canCreate = \_ _ _ -> pure True
+        { canCreate = \_ _ RawComment {..} -> pure (author == un)
         , canUpdate = canUpdate'
         , canAmend  = canAmend'
         }

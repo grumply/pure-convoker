@@ -6,14 +6,16 @@ import Pure.Convoker.Meta
 import Pure.Convoker.Mods
 import Pure.Convoker.UserVotes
 
-import Pure.Auth (Username,Token(..),withToken)
+import Pure.Auth (Username,Token(..),Access(..),withToken,authorize,defaultOnRegistered)
 import Pure.Conjurer
+import Pure.Elm.Application (storeScrollPosition,restoreScrollPosition)
 import Pure.Elm.Component as Pure hiding (not,key,pattern Meta)
-import Pure.Data.JSON
+import Pure.Data.JSON (ToJSON,FromJSON)
 import Pure.Data.Txt
 import Pure.Data.Render
 import Pure.Hooks
 import Pure.Maybe
+import Pure.Router as R
 import Pure.Sync
 import Pure.WebSocket
 
@@ -106,11 +108,27 @@ data instance Reaction (Discussion a) = NoDiscussionReaction
 instance Ownable (Discussion a) where
   isOwner un _ _ = isAdmin un
 
-type DiscussionViewer a = WebSocket -> Context a -> Name a -> Maybe Username -> Refresher -> Maybe (Product Admins,Product (Mods a),Product (UserVotes a),Product (Meta a),Product (Discussion a)) -> View
-type Refresher = IO ()
-type CommentSorter a b = Ord b => Product (Meta a) -> Product (Comment a) -> b
-type CommentViewer a = WebSocket -> Context a -> Name a -> Maybe Username -> Refresher -> Maybe (Key (Comment a)) -> Product Admins -> Product (Mods a) -> Product (UserVotes a) -> Product (Meta a) -> Product (Comment a) -> View
+data DiscussionBuilder _role a = DiscussionBuilder
+  { socket :: WebSocket
+  , context :: Context a
+  , name :: Name a
+  , user :: Maybe Username
+  , admin :: Bool
+  , mod :: Bool
+  , onRefresh :: IO ()
+  , withAuthor :: Username -> View
+  , withContent :: [View] -> [View]
+  , admins :: Product Admins
+  , mods :: Product (Mods a)
+  , votes :: Maybe (Product (UserVotes a))
+  , meta :: Product (Meta a)
+  , full :: Product (Discussion a)
+  }
 
+-- Core discussion view generator. Given an active connection, a resource's
+-- context and name, and a method of rendering a `DiscussionBuilder`, this
+-- will build the `DiscussionBuilder` context and render it if the necessary
+-- resources can be retrieved.
 discussion 
   :: forall _role a. 
     ( Typeable a
@@ -118,21 +136,92 @@ discussion
     , ToJSON (Context a), FromJSON (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Eq (Name a)
     , FromJSON (Product (Meta a))
-    ) => WebSocket -> Context a -> Name a -> DiscussionViewer a -> View
-discussion ws ctx nm viewer = 
+    ) => WebSocket -> Context a -> Name a -> (Username -> View) -> ([View] -> [View]) -> (DiscussionBuilder _role a -> View) -> View
+discussion socket ctx nm withAuthor withContent viewer = 
+
   withToken @_role $ \mt ->
+    let user = fmap (\(Token (un,_)) -> un) mt in 
+
+    -- simple switch used to trigger re-request and re-render
+    -- See `tagged` and `refresh` below for use.
     useState False $ \State {..} ->
+
       let 
-        refresh = modify Prelude.not
-        mun = fmap (\(Token (un,_)) -> un) mt
+        onRefresh = modify Prelude.not
+
         tagged
           | state     = Tagged @True
           | otherwise = Tagged @False
+
       in 
+
+        -- When `tagged` changes, when `refresh` is called, everything 
+        -- wrapped by tagged is fully re-rendered.
         tagged do
-          producingKeyed (ctx,nm) (producer mun) $ \(ctx,nm) -> 
-            consuming (viewer ws ctx nm mun refresh)
+
+          producingKeyed (ctx,nm) (producer user) $ \(context,name) -> 
+
+            let 
+              consumer :: Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)) -> View
+              consumer Nothing = Null
+              consumer (Just (admins,mods,votes,meta,full)) =
+                let
+                  admin = 
+                    case user of
+                      Just un | Admins as <- admins -> un `elem` as
+                      _ -> False
+
+                  mod =
+                    case user of
+                      Just un | Mods ms <- mods -> un `elem` ms
+                      _ -> False
+
+                in
+                  viewer (DiscussionBuilder {..} :: DiscussionBuilder _role a)
+
+            in
+              consuming consumer
+
   where
+    producer :: Maybe Username -> (Context a,Name a) -> IO (Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)))
+    producer mun (ctx,nm) = do
+
+      let 
+        getProduct 
+          :: forall a. 
+            ( Typeable a
+            , ToJSON (Context a), FromJSON (Product a)
+            , ToJSON (Name a), FromJSON (Context a)
+            ) => Context a -> Name a -> IO (IO (Maybe (Product a)))
+        getProduct ctx nm = async (request (readingAPI @a) socket (readProduct @a) (ctx,nm))
+
+      getAdmins     <- getProduct AdminsContext AdminsName
+      getMods       <- getProduct (ModsContext ctx) ModsName 
+      getVotes      <- maybe (pure (pure Nothing)) (\un -> getProduct (UserVotesContext ctx nm) (UserVotesName un)) mun 
+      getMeta       <- getProduct (MetaContext ctx nm) MetaName
+      getDiscussion <- getProduct (DiscussionContext ctx nm) DiscussionName
+
+      (admins,mods,votes0,meta,full) <- 
+        (,,,,) 
+          <$> getAdmins 
+          <*> getMods 
+          <*> getVotes 
+          <*> getMeta 
+          <*> getDiscussion
+          
+      let 
+        -- if no votes are found, seed the UserVotes with either Nothing if the
+        -- user is not logged in, or an empty userVotes if they are
+        votes = maybe (maybe Nothing (Just . emptyUserVotes) mun) Just votes0
+
+      pure $ 
+        (,,,,) 
+          <$> admins 
+          <*> mods 
+          <*> pure votes
+          <*> meta 
+          <*> full
+
     -- what an annoying type signature
     async :: forall x. ((x -> IO ()) -> IO ()) -> IO (IO x)
     async f = do
@@ -140,44 +229,43 @@ discussion ws ctx nm viewer =
       f (putMVar mv)
       pure (takeMVar mv)
 
-    producer mun (ctx,nm) = do
+type CommentSorter a b = Ord b => Product (Meta a) -> Product (Comment a) -> b
 
-      getAdmins <- async do
-        request (readingAPI @Admins) ws 
-          (readProduct @Admins) 
-          (AdminsContext,AdminsName)
+data CommentBuilder _role a = CommentBuilder
+  { socket :: WebSocket
+  , context :: Context a
+  , name :: Name a
+  , user :: Maybe Username
+  , admin :: Bool
+  , mod :: Bool
+  , onRefresh :: IO ()
+  , children :: [View]
+  , withAuthor :: Username -> View
+  , withContent :: [View] -> [View]
+  , parent :: Maybe (Key (Comment a)) 
+  , previous :: Maybe (Key (Comment a))
+  , next :: Maybe (Key (Comment a))
+  , size :: Int
+  , admins :: Product Admins
+  , mods :: Product (Mods a)
+  , votes :: Maybe (Product (UserVotes a))
+  , meta :: Product (Meta a)
+  , comment :: Product (Comment a)
+  }
 
-      getMods <- async do
-        request (readingAPI @(Mods a)) ws 
-          (readProduct @(Mods a)) 
-          (ModsContext ctx,ModsName)
-     
-      getVotes <- async do
-        maybe ($ Nothing)
-          (\un -> 
-            request (readingAPI @(UserVotes a)) ws
-              (readProduct @(UserVotes a))
-              (UserVotesContext ctx nm,UserVotesName un)
-          ) mun
- 
-      getMeta <- async do
-        request (readingAPI @(Meta a)) ws 
-          (readProduct @(Meta a)) 
-          (MetaContext ctx nm,MetaName)
+data CommentFormBuilder _role a = CommentFormBuilder
+  { socket :: WebSocket
+  , context :: Context a
+  , name :: Name a
+  , user :: Maybe Username
+  , onRefresh :: IO ()
+  , onCancel :: IO ()
+  , withContent :: [View] -> [View]
+  , parent :: Maybe (Key (Comment a))
+  , viewer :: CommentBuilder _role a -> View
+  }
 
-      getDiscussion <- async do
-        request (readingAPI @(Discussion a)) ws 
-          (readProduct @(Discussion a)) 
-          (DiscussionContext ctx nm,DiscussionName)
-
-      (admins,mods,votes,meta,discussion) <- (,,,,) <$> getAdmins <*> getMods <*> getVotes <*> getMeta <*> getDiscussion
-      pure ((,,,,) <$> admins <*> mods <*> pure (fromMaybe (emptyUserVotes (fromTxt def)) votes) <*> meta <*> discussion)
-
--- A simple approach using the components of a transposed graph of comments.
--- Takes a comment sorter that can define an arbitrary sort based on Ord using
--- the comment and the discussion's meta information.
-threads 
-  :: forall (_role :: *) a b. 
+type DiscussionLayout (_role :: *) a b =
     ( Typeable a
     , Typeable _role
     , Theme (Comment a)
@@ -186,33 +274,37 @@ threads
     , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
     , Formable (Resource (Comment a))
     , Default (Resource (Comment a))
-    , Component (Preview (Comment a))
-    , Component (Product (Comment a))
     , Ord b
-    ) => CommentSorter a b -> CommentViewer a -> DiscussionViewer a
-threads _ _ _ _ _ _ _ Nothing = "Nothing in threads"
-threads sorter viewer ws ctx nm mun refresh (Just (admins,mods,votes,meta,Discussion {..})) = 
-  Div <||> 
-    [ toCreate @_role ws (CommentContext ctx nm)
-    , Div <||> forest Nothing threads
-    ]
+    ) => CommentSorter a b -> (CommentFormBuilder _role a -> View) -> (CommentBuilder _role a -> View) -> (DiscussionBuilder _role a -> View)
+
+linear :: DiscussionLayout _role a b
+linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | Discussion {..} <- full =
+  Div <||>
+    (( useState False $ \State {..} ->
+        if state then
+          runCommentFormBuilder CommentFormBuilder 
+            { parent = Nothing
+            , viewer = runCommentBuilder
+            , onCancel = modify (const False)
+            , ..
+            } 
+        else
+          Button <| OnClick (\_ -> modify (const True)) |> [ "Add Comment" ]
+     )
+           
+    : fmap comment (List.sortOn (sorter meta) comments)
+    )
   where
-    edges = fmap (\(comment@Comment { key, parents }) -> (comment,key,parents)) comments
-    
-    (graph,nodeFromVertex,_) = G.graphFromEdges edges
-
-    -- transpose because each vertex in our graph points to predecessors
-    threads = G.components (G.transposeG graph) 
-
-    forest mparent ts = 
-      let look (G.Node n _) = let (comment,_,_) = nodeFromVertex n in comment
-      in [ tree mparent t | t <- List.sortOn (sorter meta . look) ts ]
-    
-    tree mparent (G.Node (nodeFromVertex -> (comment@Comment { key },_,_)) sub) =
-      Div <||>
-        ( viewer ws ctx nm mun refresh mparent admins mods votes meta comment
-        : forest (Just key) sub 
-        )
+    comment c = 
+      runCommentBuilder CommentBuilder 
+        { parent = Nothing
+        , previous = Nothing
+        , next = Nothing
+        , children = []
+        , size = 0
+        , comment = c
+        , ..
+        }
 
 extendCommentCallbacks 
   :: forall a. 
