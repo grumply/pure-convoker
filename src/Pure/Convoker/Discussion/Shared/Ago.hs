@@ -31,40 +31,30 @@ ago t
         hs = ms `div` 60
         Minutes ms _ = now - t
 
+    ns x nm 
+      | x == 0 = ""
+      | x == 1 = "1 " <> nm
+      | otherwise = toTxt x <> " " <> nm <> "s"
+
     years = 
       let Years ys (Months ms _) = now - t
-      in case ms of
-          0 -> toTxt ys <> " years ago"
-          1 -> toTxt ys <> " years 1 month ago"
-          _ -> toTxt ys <> " years " <> toTxt ms <> " months ago"
+      in ns ys "year" <> " " <> ns ms "month" <> " ago"
     
     months =
       let Months ms (Weeks ws _) = now - t
-      in case ws of
-          0 -> toTxt ms <> " months ago"
-          1 -> toTxt ms <> " months 1 week ago"
-          _ -> toTxt ms <> " months " <> toTxt ws <> " weeks ago"
+      in ns ms "month" <> " " <> ns ws "week" <> " ago"
 
     weeks =
       let Weeks ws (Days ds _) = now - t
-      in case ds of
-          0 -> toTxt ws <> " weeks ago"
-          1 -> toTxt ws <> " weeks 1 day ago"
-          _ -> toTxt ws <> " weeks " <> toTxt ds <> " days ago"
+      in ns ws "week" <> " " <> ns ds "day" <> " ago"
 
     days =
       let Days ds (Hours hs _) = now - t
-      in case hs of
-          0 -> toTxt ds <> " days ago"
-          1 -> toTxt ds <> " days 1 hour ago"
-          _ -> toTxt ds <> " days " <> toTxt hs <> " hours ago"
+      in ns ds "day" <> " " <> ns hs "hour" <> " ago"
 
     hours =
       let Hours hs (Minutes ms _) = now - t
-      in case ms of
-          0 -> toTxt hs <> " hours ago"
-          1 -> toTxt hs <> " hours 1 minute ago"
-          _ -> toTxt hs <> " hours " <> toTxt ms <> " minutes ago"
+      in ns hs "hour" <> " " <> ns ms "minute" <> " ago"
 
     minutes =
       let Minutes ms _ = now - t

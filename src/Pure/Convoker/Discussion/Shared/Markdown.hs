@@ -32,7 +32,6 @@ unsafeRender md = []
 #endif
 
 newtype Markdown = Markdown Txt
-  deriving stock Generic
   deriving (ToJSON,FromJSON,ToTxt,FromTxt) via Txt
 
 parseMarkdown :: Markdown -> [View]

@@ -9,7 +9,6 @@ import Pure.Convoker.Discussion
 
 import Pure.Auth (Username,Token(..))
 import Pure.Conjurer
-import Pure.Data.Bloom as Bloom
 import Pure.Data.JSON hiding (Null)
 import Pure.Elm.Component hiding (pattern Meta)
 import Data.Foldable as Foldable
@@ -86,7 +85,7 @@ authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks 
     (permissions (Just un))
     (permissions (Just un))
     discussionCallbacks 
-    (extendCommentCallbacks readPermissions discussionCallbacks commentCallbacks)
+    (extendCommentCallbacks fullPermissions discussionCallbacks commentCallbacks)
     metaCallbacks 
     modsCallbacks 
     userVotesCallbacks 
@@ -106,9 +105,9 @@ threaded
     , Default (Resource (Comment a))
     , Ord b
     , FromJSON (Product (Meta a))
-    ) => WebSocket -> Context a -> Name a -> (Username -> View) -> ([View] -> [View]) -> (Product (Meta a) -> Product (Comment a) -> b) -> (CommentFormBuilder _role a -> View) -> (CommentBuilder _role a -> View) -> View
-threaded ws ctx nm withAuthor withContent sorter commentFormBuilder commentBuilder = 
-  discussion @_role @a ws ctx nm withAuthor withContent (threads @_role @a @b sorter commentFormBuilder commentBuilder)
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment a)) -> (Username -> View) -> ([View] -> [View]) -> (Product (Meta a) -> Product (Comment a) -> b) -> (CommentFormBuilder _role a -> View) -> (CommentBuilder _role a -> View) -> View
+threaded ws ctx nm root withAuthor withContent sorter commentFormBuilder commentBuilder = 
+  discussion @_role @a ws ctx nm root withAuthor withContent (threads @_role @a @b sorter commentFormBuilder commentBuilder)
 
 threads :: DiscussionLayout _role a b
 threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full = Discussion { comments }, ..} =
@@ -119,36 +118,40 @@ threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full 
             { parent = Nothing
             , viewer = runCommentBuilder
             , onCancel = modify (const False)
+            , comment = Nothing
             , ..
             } 
         else
           Button <| OnClick (\_ -> modify (const True)) |> [ "Add Comment" ]
       )
 
-    : forest Nothing threads
+    : forest Nothing Nothing (maybe threads isolated root)
     )
   where
     edges = fmap (\(comment@Comment { key, parents = Parents ps }) -> (comment,key,ps)) comments
     
-    (graph,nodeFromVertex,_) = G.graphFromEdges edges
-
     -- transpose because each vertex in our graph points to predecessors
-    threads = G.components (G.transposeG graph) 
+    (G.transposeG -> graph,nodeFromVertex,find) = G.graphFromEdges edges
 
-    forest parent ts = 
+    threads = G.components graph
+
+    isolated k = G.dfs graph (maybe id (:) (find k) [])
+
+    forest root parent ts = 
       let look (G.Node n _) = let (comment,_,_) = nodeFromVertex n in comment
           sorted = List.sortOn (sorter meta . look) ts 
       in 
-        [ tree parent previous next t 
+        [ tree rt parent previous next t 
         | (t,pr,nx) <- zip3 sorted (Nothing : fmap Just sorted) (List.tail (fmap Just sorted ++ [Nothing])) 
         , let 
+            rt = if isJust root then root else parent
             previous = fmap (\(look -> Comment { key }) -> key) pr
             next = fmap (\(look -> Comment { key }) -> key) nx
         ]
     
-    tree parent previous next node@(G.Node (nodeFromVertex -> (comment@Comment { key },_,_)) sub) =
+    tree root parent previous next node@(G.Node (nodeFromVertex -> (comment@Comment { key },_,_)) sub) =
       runCommentBuilder CommentBuilder 
-        { children = forest (Just key) sub
+        { children = forest root (Just key) sub
         , size = Foldable.length node - 1 -- since children are passed lazily pre-rendered
         , ..
         }

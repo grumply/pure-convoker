@@ -113,6 +113,7 @@ data DiscussionBuilder _role a = DiscussionBuilder
   , context :: Context a
   , name :: Name a
   , user :: Maybe Username
+  , root :: Maybe (Key (Comment a))
   , admin :: Bool
   , mod :: Bool
   , onRefresh :: IO ()
@@ -136,8 +137,8 @@ discussion
     , ToJSON (Context a), FromJSON (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Eq (Name a)
     , FromJSON (Product (Meta a))
-    ) => WebSocket -> Context a -> Name a -> (Username -> View) -> ([View] -> [View]) -> (DiscussionBuilder _role a -> View) -> View
-discussion socket ctx nm withAuthor withContent viewer = 
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment a)) -> (Username -> View) -> ([View] -> [View]) -> (DiscussionBuilder _role a -> View) -> View
+discussion socket ctx nm root withAuthor withContent viewer = 
 
   withToken @_role $ \mt ->
     let user = fmap (\(Token (un,_)) -> un) mt in 
@@ -159,7 +160,7 @@ discussion socket ctx nm withAuthor withContent viewer =
         -- wrapped by tagged is fully re-rendered.
         tagged do
 
-          producingKeyed (ctx,nm) (producer user) $ \(context,name) -> 
+          producingKeyed (ctx,nm,user) producer $ \(context,name,user) -> 
 
             let 
               consumer :: Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)) -> View
@@ -183,8 +184,8 @@ discussion socket ctx nm withAuthor withContent viewer =
               consuming consumer
 
   where
-    producer :: Maybe Username -> (Context a,Name a) -> IO (Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)))
-    producer mun (ctx,nm) = do
+    producer :: (Context a,Name a,Maybe Username) -> IO (Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)))
+    producer (ctx,nm,mun) = do
 
       let 
         getProduct 
@@ -242,6 +243,7 @@ data CommentBuilder _role a = CommentBuilder
   , children :: [View]
   , withAuthor :: Username -> View
   , withContent :: [View] -> [View]
+  , root :: Maybe (Key (Comment a))
   , parent :: Maybe (Key (Comment a)) 
   , previous :: Maybe (Key (Comment a))
   , next :: Maybe (Key (Comment a))
@@ -263,6 +265,7 @@ data CommentFormBuilder _role a = CommentFormBuilder
   , withContent :: [View] -> [View]
   , parent :: Maybe (Key (Comment a))
   , viewer :: CommentBuilder _role a -> View
+  , comment :: Maybe (Resource (Comment a))
   }
 
 type DiscussionLayout (_role :: *) a b =
@@ -286,6 +289,7 @@ linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | D
             { parent = Nothing
             , viewer = runCommentBuilder
             , onCancel = modify (const False)
+            , comment = Nothing
             , ..
             } 
         else
@@ -297,7 +301,8 @@ linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | D
   where
     comment c = 
       runCommentBuilder CommentBuilder 
-        { parent = Nothing
+        { root = Nothing
+        , parent = Nothing
         , previous = Nothing
         , next = Nothing
         , children = []
@@ -324,6 +329,13 @@ extendCommentCallbacks discussionPermissions discussionCallbacks cbs = cbs
     tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
+  
+  , onAmend = \(CommentContext ctx nm) cnm res pro pre lst amnd -> void do
+    onAmend cbs (CommentContext ctx nm) cnm res pro pre lst amnd
+    tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
+      (DiscussionContext ctx nm) DiscussionName 
+        (SetComment pro pre)
+  
   }
 
 createDiscussion 

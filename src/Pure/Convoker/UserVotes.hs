@@ -16,7 +16,6 @@ import Pure.Convoker.Meta
 
 import Pure.Auth (Username)
 import Pure.Conjurer
-import Pure.Data.Bloom as Bloom
 import Pure.Data.JSON
 import Pure.Elm.Component
 
@@ -60,19 +59,10 @@ data instance Resource (UserVotes a) = RawUserVotes
 
 data instance Product (UserVotes a) = UserVotes
   { username  :: Username
-  , upvotes   :: Bloom
-  , downvotes :: Bloom
+  , upvotes   :: [Key (Comment a)]
+  , downvotes :: [Key (Comment a)]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
-
-instance ToJSON Bloom where
-  toJSON = unsafePerformIO . Bloom.encode
-
-instance FromJSON Bloom where
-  parseJSON o = do
-    case unsafePerformIO (Bloom.decode o) of
-      Nothing -> mzero
-      Just b  -> pure b
 
 data instance Preview (UserVotes a) = NoUserVotesPreview
   deriving stock Generic
@@ -136,14 +126,7 @@ instance Amendable (UserVotes a) where
 instance Processable (UserVotes a)
 
 instance Producible (UserVotes a) where
-  produce _ _ _ RawUserVotes {..} = do
-    upvotes' <- new 0.0001 (List.length upvotes)
-    for_ upvotes (add upvotes')
-
-    downvotes' <- new 0.0001 (List.length downvotes)
-    for_ downvotes (add downvotes')
-
-    pure (UserVotes username upvotes' downvotes')
+  produce _ _ _ RawUserVotes {..} = pure UserVotes {..}
 
 instance Previewable (UserVotes a) where
   preview _ _ _ _ _ = pure NoUserVotesPreview
@@ -162,8 +145,14 @@ instance
   ) => DefaultPermissions (UserVotes a) 
   where
     permissions Nothing = noPermissions
-    permissions (Just un) = readPermissions { canAmend = canAmend' }
+    permissions (Just un) = noPermissions 
+      { canCreate = canCreate'
+      , canRead = canRead'
+      , canAmend = canAmend' 
+      }
       where
+        canCreate' _ (UserVotesName user) _ = pure (user == un)
+        canRead' _ (UserVotesName user) = pure (user == un)
         canAmend' ctx (UserVotesName user) _ 
           | user == un = do
             tryReadResource (permissions (Just un)) (callbacks (Just un)) ctx (UserVotesName un) >>= \case
@@ -176,10 +165,7 @@ instance
             pure False
 
 emptyUserVotes :: Username -> Product (UserVotes a)
-emptyUserVotes un = unsafePerformIO do
-  us <- new 0.0001 100
-  ds <- new 0.0001 100
-  pure (UserVotes un us ds)
+emptyUserVotes un = UserVotes un [] []
 
 tryUpvote 
   :: ( Typeable a

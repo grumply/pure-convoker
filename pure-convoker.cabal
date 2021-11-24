@@ -19,7 +19,6 @@ library
   build-depends:
       base
     , pure-auth
-    , pure-bloom
     , pure-conjurer
     , pure-elm
     , pure-hooks
@@ -27,6 +26,7 @@ library
     , pure-maybe
     , pure-render
     , pure-router
+    , pure-shadows
     , pure-sorcerer
     , pure-sync
     , pure-tagsoup

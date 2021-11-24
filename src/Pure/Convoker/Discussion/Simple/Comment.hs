@@ -13,7 +13,7 @@ import Pure.Convoker.Discussion.Shared.Markdown
 
 import Pure.Auth (Username)
 import Pure.Conjurer
-import Pure.Data.JSON (ToJSON,FromJSON)
+import Pure.Data.JSON (ToJSON,FromJSON,traceJSON)
 import Pure.Elm.Component hiding (pattern Delete,not)
 
 import Data.Hashable
@@ -55,6 +55,10 @@ Design notes:
     
 -}
 
+-- Overridable instances. These aren't used in the default discussion views.
+instance {-# INCOHERENT #-} Typeable a => Component (Preview (Comment a))
+instance {-# INCOHERENT #-} Typeable a => Component (Product (Comment a))
+
 data instance Resource (Comment a) = RawComment
   { author   :: Username
   , key      :: Key (Comment a)
@@ -83,16 +87,16 @@ instance Nameable (Comment a) where
 
 instance Amendable (Comment a) where
   data Amend (Comment a) 
-    = SetContent Markdown Time
+    = SetContent Markdown
     | Delete
     | Undelete
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-  amend (SetContent md t) RawComment {..} | Deleted True <- deleted = 
+  amend (SetContent md) RawComment {..} | Deleted False <- deleted = 
     Just RawComment
       { content = md 
-      , edited = Edited (Just t)
+      , edited = Edited (Just (unsafePerformIO time))
       , ..
       }
       
@@ -155,6 +159,6 @@ instance
       where
         canUpdate' (CommentContext ctx nm) (CommentName k) = canEditComment ctx nm k un
         canAmend' (CommentContext ctx nm) (CommentName k) = \case
-          SetContent _ _ -> canEditComment ctx nm k un
-          _              -> isMod ctx un 
+          SetContent _ -> canEditComment ctx nm k un
+          _            -> isMod ctx un 
 

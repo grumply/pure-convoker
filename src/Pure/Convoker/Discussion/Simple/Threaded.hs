@@ -13,13 +13,13 @@ import Pure.Convoker.Discussion.Simple.Meta hiding (Upvote,Downvote)
 
 import Pure.Auth (Username,Token(..),Access(..),authorize,defaultOnRegistered)
 import Pure.Conjurer
-import Pure.Data.Bloom as Bloom
 import Pure.Data.JSON hiding (Null)
 import Pure.Elm.Component hiding (jump,pattern Meta,pattern Delete)
 import Pure.Elm.Application (restoreScrollPosition,storeScrollPosition)
 import Pure.Hooks (useEffectWith')
+import qualified Pure.Shadows as Shadows
 import Pure.Sync
-import Pure.WebSocket
+import Pure.WebSocket hiding (Reply,none)
 
 import Data.Hashable
 
@@ -50,8 +50,10 @@ simpleThreaded
     , Default (Resource (Comment a))
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
-    ) => WebSocket -> Context a -> Name a -> (Username -> View) -> ([View] -> [View]) -> View
-simpleThreaded ws ctx nm withAuthor withContent = threaded @_role ws ctx nm withAuthor withContent simpleSorter simpleCommentForm (run . SimpleComment)
+    , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment a)
+    , Fieldable Markdown
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment a)) -> (Username -> View) -> ([View] -> [View]) -> View
+simpleThreaded ws ctx nm root withAuthor withContent = threaded @_role ws ctx nm root withAuthor withContent simpleSorter simpleCommentForm (run . SimpleComment)
 
 newtype SimpleSorter a = SimpleSorter (Int,Key (Comment a))
 instance Eq (SimpleSorter a) where
@@ -71,6 +73,7 @@ simpleCommentForm
     , Typeable _role
     , ToJSON (Context a), FromJSON (Context a)
     , ToJSON (Name a), FromJSON (Name a)
+    , Fieldable Markdown
     ) => CommentFormBuilder _role a -> View
 simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id defaultOnRegistered) go
   where
@@ -78,12 +81,14 @@ simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id d
       let 
         onPreview :: Resource (Comment a) -> IO View
         onPreview c = do
-          r <- sync (request (publishingAPI @(Comment a)) socket (previewResource @(Comment a)) (CommentContext context name,c))
+          r <- sync (request (publishingAPI @(Comment a)) socket (previewResource @(Comment a)) 
+                (CommentContext context name,(c :: Resource (Comment a)) { author = un, parents = Parents $ maybeToList parent }))
           case r of
             Nothing -> pure "Invalid comment."
             Just (_,_,_,comment,_) -> pure do
               Div <| Themed @Previewing |>
                 [ let 
+                    root = Nothing
                     children = []
                     previous = Nothing
                     next = Nothing
@@ -100,13 +105,24 @@ simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id d
                 ]
 
         onSubmit :: Resource (Comment a) -> IO ()
-        onSubmit c = do
-          mi <- sync (request (publishingAPI @(Comment a)) socket (createResource @(Comment a)) (CommentContext context name,c))
-          for_ mi (\_ -> storeScrollPosition >> onRefresh >> restore)
+        onSubmit c@RawComment { content, key }
+          | Just _ <- comment = do
+            b <- sync do
+              request (publishingAPI @(Comment a)) socket (amendResource @(Comment a)) 
+                (CommentContext context name,CommentName key,SetContent content)
+            if b then void do 
+              storeScrollPosition >> onRefresh >> restore
+            else
+              pure ()
+          | otherwise = do
+            mi <- sync do
+              request (publishingAPI @(Comment a)) socket (createResource @(Comment a)) 
+                (CommentContext context name,(c :: Resource (Comment a)) { author = un, parents = Parents $ maybeToList parent })
+            for_ mi (\_ -> storeScrollPosition >> onRefresh >> restore)
 
       in 
         Div <| Themed @Creating |>
-          [ form onSubmit onPreview (def :: Resource (Comment a))
+          [ form onSubmit onPreview (fromMaybe def comment)
           ]
           
     restore =
@@ -120,29 +136,40 @@ simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id d
 
 newtype SimpleComment (_role :: *) (a :: *) = SimpleComment (CommentBuilder _role a)
 
-instance (Typeable _role, Typeable a, ToJSON (Context a), FromJSON (Context a), ToJSON (Name a), FromJSON (Name a)) => Component (SimpleComment _role a) where
+instance 
+  ( Typeable _role
+  , Typeable a
+  , ToJSON (Context a), FromJSON (Context a)
+  , ToJSON (Name a), FromJSON (Name a)
+  , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment a)
+  , Fieldable Markdown
+  ) => Component (SimpleComment _role a) where
   data Model (SimpleComment _role a) = SimpleCommentModel
     { total     :: Int
     , vote      :: Maybe Bool
+    , editing   :: Maybe (Resource (Comment a))
     , replying  :: Bool
     , collapsed :: Bool
     , deleted   :: Bool
+    , comment   :: Product (Comment a)
     }
 
-  initialize (SimpleComment CommentBuilder { comment = Comment { key, deleted }, ..}) 
+  initialize (SimpleComment CommentBuilder { comment = c@Comment { key, deleted }, ..}) 
     | UserVotes {..} <- maybe (emptyUserVotes (maybe (fromTxt def) id user)) id votes
     , Meta { votes = Votes vs } <- meta 
     = let 
+        editing = Nothing
         replying = False
         collapsed = False
         total = fromMaybe 0 (List.lookup key vs)
         vote 
-          | unsafePerformIO (Bloom.test upvotes key)   = Just True
-          | unsafePerformIO (Bloom.test downvotes key) = Just False
-          | otherwise                                  = Nothing
+          | List.elem key upvotes   = Just True
+          | List.elem key downvotes = Just False
+          | otherwise               = Nothing
       in
         pure SimpleCommentModel 
-          { deleted = coerce deleted
+          { comment = c
+          , deleted = coerce deleted
           , ..
           }
 
@@ -155,14 +182,28 @@ instance (Typeable _role, Typeable a, ToJSON (Context a), FromJSON (Context a), 
     | Collapse
     | Uncollapse
     | Replying
+    | Editing
+
+  upon Editing (SimpleComment CommentBuilder { socket, context, name, comment = Comment { key } }) mdl = do
+    case editing mdl of
+      Nothing -> do
+        mc <- sync do
+          request
+            (publishingAPI @(Comment a))
+            socket
+            (readResource @(Comment a))
+            (CommentContext context name,CommentName key)
+        pure mdl { editing = mc }
+      Just _ -> 
+        pure mdl { editing = Nothing }
 
   upon Replying _ mdl = pure mdl { replying = Prelude.not (replying mdl) }
 
   upon Collapse _ mdl = pure mdl { collapsed = True }
 
-  upon Uncollapse _ mdl = pure mdl { collapsed = True }
+  upon Uncollapse _ mdl = pure mdl { collapsed = False }
 
-  upon Delete (SimpleComment CommentBuilder { socket, context, name, comment = Comment { key } }) mdl = do
+  upon Delete (SimpleComment CommentBuilder { socket, context, name }) mdl@SimpleCommentModel { comment = Comment { key } } = do
     request 
       (publishingAPI @(Comment a)) 
       socket 
@@ -171,16 +212,22 @@ instance (Typeable _role, Typeable a, ToJSON (Context a), FromJSON (Context a), 
       def 
     pure (mdl :: Model (SimpleComment _role a)) { deleted = True }
     
-  upon Undelete (SimpleComment CommentBuilder { socket, context, name, comment = Comment { key } }) mdl = do
-    request 
-      (publishingAPI @(Comment a)) 
-      socket 
-      (amendResource @(Comment a)) 
-      (CommentContext context name,CommentName key,Comment.Undelete) 
-      def 
-    pure (mdl :: Model (SimpleComment _role a)) { deleted = False }
+  upon Undelete (SimpleComment CommentBuilder { socket, context, name }) mdl@SimpleCommentModel { comment = x@Comment { key } } = do
+    sync do
+      request 
+        (publishingAPI @(Comment a)) 
+        socket 
+        (amendResource @(Comment a)) 
+        (CommentContext context name,CommentName key,Comment.Undelete) 
+    c <- sync do
+      request
+        (readingAPI @(Comment a))
+        socket
+        (readProduct @(Comment a))
+        (CommentContext context name,CommentName key)
+    pure (mdl :: Model (SimpleComment _role a)) { deleted = False, comment = fromMaybe x c }
    
-  upon msg (SimpleComment CommentBuilder { socket, context, name, user = Just username, comment = Comment { key } }) mdl@SimpleCommentModel { total, vote } = do
+  upon msg (SimpleComment CommentBuilder { socket, context, name, user = Just username }) mdl@SimpleCommentModel { comment = Comment { key }, total, vote } = do
     let 
       rq v = 
         request 
@@ -221,113 +268,211 @@ instance (Typeable _role, Typeable a, ToJSON (Context a), FromJSON (Context a), 
       
   upon _ _ mdl = pure mdl
 
-  view (SimpleComment CommentBuilder {..}) SimpleCommentModel {..} =
+  view (SimpleComment CommentBuilder {..}) SimpleCommentModel { deleted = del, comment = cmt, ..} =
     let 
       UserVotes { upvotes, downvotes } = maybe (emptyUserVotes (maybe (fromTxt def) id user)) id votes 
-      Comment { author, created, edited, content, key } = comment
+      Comment { author, deleted, created, edited, content, key } = cmt
       Created c = created
 
       button name action = Button <| OnClick (\_ -> action) |> [ name ]
       
     in 
-      Article <| Id (toTxt key) |>
-        [ Footer <||>
-          [ Span <||>
-            [ txt (simplified total)
+      Article <| Themed @(Comment a) . Id (toTxt key) |>
+        [ Footer <| Themed @Meta |>
+          [ if del then
+              Null
+            else 
+              Section <| Themed @UserVotes |>
+                [ case user of
+                    Just _ ->
+                      case vote of
+                        Just False -> button "▼" (command Unvote)
+                        Just True  -> button "▽" (command Unvote)
+                        Nothing    -> button "▽" (command Downvote)
+                    _ -> Null
 
-            , " | "
+                , txt (simplified total)
+                  
+                , case user of
+                    Just _ ->
+                      case vote of
+                        Just True  -> button "▲" (command Unvote)
+                        Just False -> button "△" (command Unvote)
+                        Nothing    -> button "△" (command Upvote)
+                    _ -> Null
 
-            , withAuthor author
+                ]
 
-            , " | " 
+          , Section <| Themed @Username |> [ withAuthor author ]
 
-            , SimpleHTML "time" <| Attribute "pubdate" "" . DateTime (toZonedDateTime c) |> 
-              [ txt (ago c) ]
-
-            , case edited of
-                Edited (Just _) -> " | edited | "
-                _ -> " | "
-
-            , case parent of
-                Just k -> button "parent" (jump (toTxt k))
+          , let e | Edited (Just _) <- edited = Themed @Edited | otherwise = id
+            in Section <| Themed @Created . e |>
+                [ SimpleHTML "time" <| Attribute "pubdate" "" . DateTime (toZonedDateTime c) |> 
+                  [ txt (ago c) ]
+                ]
+          , Section <| Themed @Controls |>
+            [ case previous of
+                Just k -> button "←" (jump (toTxt k))
                 _ -> Null
 
-            , case previous of
-                Just k -> button "prev" (jump (toTxt k))
+            , case root of
+                Just k | root /= parent -> button "↸" (jump (toTxt k))
+                _ -> Null
+                
+            , case parent of
+                Just k -> button "↖︎" (jump (toTxt k))
                 _ -> Null
 
             , case next of
-                Just k -> button "next" (jump (toTxt k))
+                Just k -> button "→" (jump (toTxt k))
                 _ -> Null
-            
-            , " | "
-
-            -- When optimizing, collapse into a span with a single case of `vote`
-            , case vote of
-                Just _ -> button "unvote" (command Unvote)
-                _ -> Null
-
-            , case vote of
-                Nothing -> button "upvote" (command Upvote)
-                _  -> Null
-
-            , case vote of
-                Nothing -> button "downvote" (command Downvote)
-                _  -> Null
-            
-            , " | "
-
-            -- When optimizing, collapse into a span with a single case of `collapsed`
+              
             , if collapsed then 
-                button (fromTxt $ "[" <> toTxt size <> " more]") (command Uncollapse)
-              else
-                Null
-
-            , if Prelude.not collapsed && size > 0 then
+                button (fromTxt $ "[" <> toTxt (size + 1) <> " more]") (command Uncollapse)
+              else 
                 button "[-]" (command Collapse)
+
+            , if Just author == user && isNothing editing then
+                button "edit" (command Editing)
+              else if Just author == user && isJust editing then
+                button "cancel" (command Editing)
               else
                 Null
 
-            -- When optimizing, collapse the admin controls into a span guarded with (admin || mod)
-            , if admin || mod then
-                " | "
-              else
-                Null
-            
-            , if admin || mod && Prelude.not deleted then
+            , if (admin || mod) && Prelude.not del then
                 button "delete" (command Delete)
-              else
-                Null
-
-            , if admin || mod && deleted then
+              else if (admin || mod) && del then
                 button "undelete" (command Undelete)
               else
                 Null
+
             ]
+
           ]
 
-        , Section <||> 
-          if deleted then -- to avoid a reload for moderators/admins
-            [ "[ removed ]" ]
+        , if collapsed then
+            Null 
+          else if del || deleted == Deleted True then -- del to avoid a reload for moderators/admins
+            Section <| Themed @Markdown |> [ "[ removed ]" ]
+          else 
+            Section <| Themed @Markdown |> withContent content
+
+        , if collapsed then
+            Null
+          else if replying then 
+            Footer <| Themed @Reply |> [ button "cancel" (command Replying) ]
           else
-            withContent content
-        
-        , Footer <||>
-          [ button "reply" (command Replying) 
-          ]
-          
-        , if Prelude.not replying then Null else
-          Aside <||> -- Section? I kind of like the use of Aside here.
-            [ simpleCommentForm @_role @a CommentFormBuilder
-                { onCancel = command Replying
-                , viewer = run . SimpleComment
-                , .. 
-                }
-            ]
+            Footer <| Themed @Reply |> [ button "reply" (command Replying) ]
 
-        , if Prelude.null children then Null else 
-          Section <||> children 
+        , case replying of
+            True | Nothing <- editing, False <- collapsed -> 
+              Aside <||> -- Section? I kind of like the use of Aside here.
+                [ simpleCommentForm @_role @a CommentFormBuilder
+                    { parent = Just key
+                    , onCancel = command Replying
+                    , viewer = run . SimpleComment
+                    , comment = Nothing
+                    , .. 
+                    }
+                ]
+            _ -> Null
+
+        , case editing of
+            Just c | False <- replying, False <- collapsed -> 
+              Aside <||> -- Section? I kind of like the use of Aside here.
+                [ simpleCommentForm @_role @a CommentFormBuilder
+                    { parent = Just key
+                    , onCancel = command Replying
+                    , viewer = run . SimpleComment
+                    , comment = Just c
+                    , .. 
+                    }
+                ]
+            _ -> Null
+
+        , if Prelude.not (Prelude.null children) && Prelude.not collapsed then 
+            Section <| Themed @Children |> children 
+          else 
+            Null 
         ]
+
+data Controls
+data Reply
+data Children
+instance {-# OVERLAPPABLE #-} Typeable a => Theme (Comment a) where
+  theme c =
+    is c do
+      margin-top =: 0.5em
+
+      has (subtheme @Creating) do
+        box-shadow =: Shadows.shadow Shadows.OffsetBottom 5 
+        margin =: 1em
+        border-radius =: 1em
+        padding =: 1em
+
+      has (subtheme @UserVotes) do
+        display =: inline
+        has (tag Button) do
+          border =: none
+          background-color =: inherit
+          cursor =: pointer
+
+          hover do
+            text-decoration =: underline
+
+      has (subtheme @Created) do
+        display =: inline
+        margin-left =: 0.5em
+        margin-right =: 0.5em
+        
+        has "time" do
+          display =: inline
+
+      has (subtheme @Username) do
+        display =: inline
+        margin-left =: 0.5em
+        margin-right =: 0.5em
+
+      has (subtheme @Controls) do
+        display =: inline
+        has (tag Button) do
+          border =: none
+          background-color =: inherit
+          cursor =: pointer
+
+          hover do
+            text-decoration =: underline
+
+      has (subtheme @Markdown) do
+        margin-left =: 1em
+
+      has (subtheme @Reply) do
+        has (tag Button) do
+          border =: none
+          background-color =: inherit
+          cursor =: pointer
+
+          hover do
+            text-decoration =: underline
+
+      has (subtheme @Children) do
+        border-left =* [1px,solid,black]
+        margin-left =: 1em
+        padding-left =: 1em
+
+      has ".RawComment" do
+        child (tag H2) do
+          display =: none
+      
+instance Theme Meta
+instance Theme UserVotes
+instance Theme Edited
+instance Theme Created
+instance Theme Username
+instance Theme Controls
+instance Theme Reply
+instance Theme Markdown
+instance Theme Children
 
 #ifdef __GHCJS__
 foreign import javascript unsafe

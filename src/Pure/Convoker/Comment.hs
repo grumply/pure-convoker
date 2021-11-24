@@ -57,6 +57,9 @@ Design notes:
 
 data Comment (a :: *)
 
+instance Fieldable Username where
+  field _ _ = Null
+
 newtype Deleted = Deleted Bool
   deriving (Eq,Ord,ToJSON,FromJSON) via Bool
 
