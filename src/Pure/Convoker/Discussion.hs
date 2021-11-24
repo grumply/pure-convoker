@@ -355,7 +355,9 @@ createDiscussion
     ) => Context a -> Name a -> [Username] -> IO ()
 createDiscussion ctx nm mods = void do
   tryCreate @(Discussion a) fullPermissions def (DiscussionContext ctx nm) (RawDiscussion ctx nm []) 
-  tryCreate @(Mods a) fullPermissions def (ModsContext ctx) (RawMods mods)
+  tryReadResource fullPermissions def (ModsContext ctx) ModsName >>= \case
+    Just RawMods {} -> pure ()
+    _ -> void (tryCreate @(Mods a) fullPermissions def (ModsContext ctx) (RawMods mods))
   tryCreate @(Meta a) fullPermissions def (MetaContext ctx nm) (def :: Resource (Meta a))
 
 addDiscussionCreationCallbacks 
