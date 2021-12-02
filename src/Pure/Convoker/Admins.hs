@@ -124,6 +124,7 @@ adminPermissions un = Permissions {..}
     canInteract ctx nm actn = isAdmin un
     canDelete   ctx nm      = isAdmin un
     canList     ctx         = isAdmin un
+    canEnum                 = isAdmin un
 
 -- This is dangerous from a referntiality perspective, but awfully convenient.
 instance {-# INCOHERENT #-} Ownable x where

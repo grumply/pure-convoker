@@ -10,4 +10,5 @@ mkDerivation {
       else [ pandoc ]
     );
   license = stdenv.lib.licenses.bsd3;
+  doHaddock = false;
 }

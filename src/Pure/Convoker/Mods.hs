@@ -44,7 +44,7 @@ data instance Preview (Mods a) = NoModsPreview
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance (Pathable (Context a), Hashable (Context a), Typeable a) => Ownable (Mods a) where
+instance (Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a) => Ownable (Mods a) where
   isOwner un ctx _ = liftM2 (||) (isMod ctx un) (isAdmin un)
 
 data instance Context (Mods a) = ModsContext (Context a)
@@ -118,13 +118,13 @@ tryRemoveMod permissions callbacks ctx mod = fmap isJust do
 
 modPermissions 
   :: ( Typeable (a :: *)
-     , Pathable (Context (Mods a)), Hashable (Context (Mods a))
+     , Pathable (Context (Mods a)), Hashable (Context (Mods a)), Ord (Context a)
      ) => Username -> Permissions (Mods a)
 modPermissions un = readPermissions { canAmend = canAmend' }
   where
     canAmend' ctx _ _ = isMod ctx un
 
-isMod :: (Pathable (Context a), Hashable (Context a), Typeable a) => Context a -> Username -> IO Bool
+isMod :: (Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a) => Context a -> Username -> IO Bool
 isMod ctx un =
   tryReadProduct fullPermissions (callbacks (Just un)) (ModsContext ctx) ModsName >>= \case
     Just Mods {..} | un `elem` mods -> pure True

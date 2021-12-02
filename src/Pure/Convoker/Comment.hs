@@ -127,8 +127,8 @@ instance Previewable (Comment a) where
 
 canEditComment 
   :: ( Typeable a
-     , Pathable (Context a), Hashable (Context a)
-     , Pathable (Name a), Hashable (Name a)
+     , Pathable (Context a), Hashable (Context a), Ord (Context a)
+     , Pathable (Name a), Hashable (Name a), Ord (Name a)
      ) => Context a -> Name a -> Key (Comment a) -> Username -> IO Bool
 canEditComment ctx nm k un = 
   tryReadProduct fullPermissions (callbacks (Just un)) (CommentContext ctx nm) (CommentName k) >>= \case

@@ -21,10 +21,10 @@ import Data.Hashable
 import Data.Typeable
 
 type Convokable a = 
-  ( Pathable (Context a), Hashable (Context a)
+  ( Pathable (Context a)
   , ToJSON (Context a), FromJSON (Context a)
 
-  , Pathable (Name a), Hashable (Name a)
+  , Pathable (Name a)
   , ToJSON (Name a), FromJSON (Name a)
 
   , Amendable (Comment a)
@@ -42,10 +42,10 @@ convoke
   :: forall a.
     ( Typeable a
 
-    , Pathable (Context a), Hashable (Context a)
+    , Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Context a), FromJSON (Context a)
 
-    , Pathable (Name a), Hashable (Name a)
+    , Pathable (Name a), Hashable (Name a), Ord (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
     , Amendable (Comment a)
@@ -58,14 +58,13 @@ convoke
     , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
     , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
 
-    ) => [Listener]
-convoke = concat
-  [ conjure @(Discussion a) 
-  , conjure @(Comment a)
-  , conjure @(Meta a)
-  , conjure @(Mods a)
-  , conjure @(UserVotes a)
-  ]
+    ) => IO ()
+convoke = do
+  conjure @(Discussion a) 
+  conjure @(Comment a)
+  conjure @(Meta a)
+  conjure @(Mods a)
+  conjure @(UserVotes a)
 
 -- | This should be considered an extensible API for managing an unauthenticated
 -- user's discussion endpoints. You can choose to satisfy some of the 
@@ -82,10 +81,10 @@ unauthenticatedEndpoints
   :: forall (a :: *). 
     ( Typeable a
 
-    , Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , Pathable (Context a), Ord (Context a), Hashable (Context a)
     , ToJSON (Context a), FromJSON (Context a)
 
-    , Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , Pathable (Name a), Ord (Name a), Hashable (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
     , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
@@ -140,10 +139,10 @@ authenticatedEndpoints
   :: forall (a :: *). 
     ( Typeable a
 
-    , Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , Pathable (Context a), Ord (Context a), Hashable (Context a)
     , ToJSON (Context a), FromJSON (Context a)
 
-    , Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , Pathable (Name a), Ord (Name a), Hashable (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
     , Nameable (Comment a)
@@ -218,10 +217,10 @@ convokerCache
   :: forall a. 
     ( Typeable a
 
-    , Pathable (Context a), Hashable (Context a), Ord (Context a)
+    , Pathable (Context a), Ord (Context a), Hashable (Context a)
     , ToJSON (Context a), FromJSON (Context a)
 
-    , Pathable (Name a), Hashable (Name a), Ord (Name a)
+    , Pathable (Name a), Ord (Name a), Hashable (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
     , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))

@@ -145,8 +145,8 @@ instance Producible (Comment a) where
 
 instance 
   ( Typeable a 
-  , Pathable (Context a), Hashable (Context a)
-  , Pathable (Name a), Hashable (Name a)
+  , Pathable (Context a), Hashable (Context a), Ord (Context a)
+  , Pathable (Name a), Hashable (Name a), Ord (Name a)
   ) => DefaultPermissions (Comment a) 
   where
     permissions Nothing = readPermissions
