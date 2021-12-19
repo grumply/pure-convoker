@@ -126,7 +126,7 @@ instance Amendable (UserVotes a) where
 instance Processable (UserVotes a)
 
 instance Producible (UserVotes a) where
-  produce _ _ _ RawUserVotes {..} = pure UserVotes {..}
+  produce _ _ _ RawUserVotes {..} _ = pure UserVotes {..}
 
 instance Previewable (UserVotes a) where
   preview _ _ _ _ _ = pure NoUserVotesPreview

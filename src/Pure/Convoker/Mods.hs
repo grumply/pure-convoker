@@ -63,7 +63,7 @@ data instance Name (Mods a) = ModsName
 instance Processable (Mods a)
 
 instance Producible (Mods a) where
-  produce _ _ _ RawMods {..} = pure Mods {..}
+  produce _ _ _ RawMods {..} _ = pure Mods {..}
 
 instance Previewable (Mods a) where
   preview _ _ _ _ _ = pure NoModsPreview

@@ -1,3 +1,4 @@
+{-# language CPP #-}
 module Pure.Convoker.Admins 
   ( Admins(..)
   , Context(..)
@@ -23,6 +24,8 @@ import Control.Monad (liftM2)
 import Data.List as List
 import Data.Maybe
 import GHC.Generics
+
+import Pure.WebSocket.Cache as WS
 
 data Admins
 data instance Resource Admins = RawAdmins
@@ -50,7 +53,7 @@ data instance Name Admins = AdminsName
 instance Routable Admins
 
 instance Producible Admins where
-  produce _ _ _ RawAdmins {..} = pure Admins {..}
+  produce _ _ _ RawAdmins {..} _ = pure Admins {..}
 
 instance Previewable Admins where
   preview _ _ _ _ _ = pure NoAdminsPreview
@@ -107,9 +110,15 @@ tryRemoveAdmin permissions callbacks un = fmap isJust do
 
 isAdmin :: Username -> IO Bool
 isAdmin un = 
+#ifdef __GHCJS__
+  WS.req WS.Cached (readingAPI @Admins) (readProduct @Admins) (AdminsContext,AdminsName) >>= \case
+    Nothing -> pure False
+    Just Admins {..} -> pure (un `elem` admins)
+#else
   tryReadProduct readPermissions (callbacks Nothing) AdminsContext AdminsName >>= \case
-    Just Admins {..} | un `elem` admins -> pure True
+    Just Admins {..} -> pure (un `elem` admins)
     _ -> pure False
+#endif
 
 defaultIsOwner :: Ownable a => Username -> Context a -> Name a -> IO Bool
 defaultIsOwner un ctx nm = liftM2 (||) (isOwner un ctx nm) (isAdmin un)
@@ -126,6 +135,3 @@ adminPermissions un = Permissions {..}
     canList     ctx         = isAdmin un
     canEnum                 = isAdmin un
 
--- This is dangerous from a referntiality perspective, but awfully convenient.
-instance {-# INCOHERENT #-} Ownable x where
-  isOwner un _ _ = isAdmin un

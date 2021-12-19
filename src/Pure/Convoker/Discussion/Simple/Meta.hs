@@ -74,7 +74,7 @@ data instance Preview (Meta a) = NoMetaPreview
 instance Processable (Meta a)
 
 instance Producible (Meta a) where
-  produce _ _ _ RawMeta {..} = pure Meta {..}
+  produce _ _ _ RawMeta {..} _ = pure Meta {..}
 
 instance Previewable (Meta a) where
   preview _ _ _ _ _ = pure NoMetaPreview 

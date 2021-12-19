@@ -90,7 +90,7 @@ deriving instance (FromJSON (Product (Comment a)), FromJSON (Preview (Comment a)
 instance Processable (Discussion a)
 
 instance Producible (Discussion a) where
-  produce _ _ _ RawDiscussion {..} =
+  produce _ _ _ RawDiscussion {..} _ =
     pure Discussion { comments = fmap fst comments, .. }
 
 instance Previewable (Discussion a) where
