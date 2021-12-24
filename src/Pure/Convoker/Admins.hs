@@ -23,51 +23,50 @@ import Data.Hashable
 import Control.Monad (liftM2)
 import Data.List as List
 import Data.Maybe
+import Data.Typeable (Typeable)
 import GHC.Generics
 
 import Pure.WebSocket.Cache as WS
 
-data Admins
-data instance Resource Admins = RawAdmins
+data Admins (ctx :: *)
+data instance Resource (Admins ctx) = RawAdmins
   { admins :: [Username]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-data instance Product Admins = Admins
+data instance Product (Admins ctx) = Admins
   { admins :: [Username] 
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-data instance Preview Admins = NoAdminsPreview
+data instance Preview (Admins ctx) = NoAdminsPreview
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-data instance Context Admins = AdminsContext
+data instance Context (Admins ctx) = AdminsContext
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-data instance Name Admins = AdminsName
+data instance Name (Admins ctx) = AdminsName
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance Routable Admins
-
-instance Producible Admins where
+instance Producible (Admins ctx) where
   produce _ _ _ RawAdmins {..} _ = pure Admins {..}
 
-instance Previewable Admins where
+instance Previewable (Admins ctx) where
   preview _ _ _ _ _ = pure NoAdminsPreview
 
-instance Nameable Admins where
+instance Nameable (Admins ctx) where
   toName _ = AdminsName
 
-instance Processable Admins
+instance Processable (Admins ctx)
 
-instance Ownable Admins where
-  isOwner un _ _ = isAdmin un
+instance Typeable ctx => Ownable (Admins ctx) where
+  isOwner un _ _ = isAdmin @ctx un
 
-instance Amendable Admins where
-  data Amend Admins = AddAdmin Username | RemoveAdmin Username
+instance Amendable (Admins ctx) where
+  data Amend (Admins ctx) = AddAdmin Username | RemoveAdmin Username
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
@@ -80,58 +79,58 @@ instance Amendable Admins where
   amend _ _ = 
     Nothing
 
-data instance Action Admins = NoAdminsAction
+data instance Action (Admins ctx) = NoAdminsAction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-data instance Reaction Admins = NoAdminsReaction
+data instance Reaction (Admins ctx) = NoAdminsReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance DefaultPermissions Admins where
+instance Typeable ctx => DefaultPermissions (Admins ctx) where
   permissions Nothing = readPermissions
   permissions (Just un) = readPermissions { canAmend = canAmend' }
     where
-      canAmend' _ _ _ = isAdmin un
+      canAmend' _ _ _ = isAdmin @ctx un
 
-tryCreateAdmins :: [Username] -> IO Bool
+tryCreateAdmins :: forall (ctx :: *). Typeable ctx => [Username] -> IO Bool
 tryCreateAdmins admins = fmap isJust do
-  tryCreate fullPermissions (callbacks Nothing) AdminsContext (RawAdmins admins)
+  tryCreate (fullPermissions @(Admins ctx)) (callbacks @(Admins ctx) Nothing) AdminsContext (RawAdmins @ctx admins)
 
-tryAddAdmin :: Permissions Admins -> Callbacks Admins -> Username -> IO Bool
+tryAddAdmin :: forall ctx. Typeable ctx => Permissions (Admins ctx) -> Callbacks (Admins ctx) -> Username -> IO Bool
 tryAddAdmin permissions callbacks un = fmap isJust do
   tryAmend permissions callbacks AdminsContext AdminsName 
     (AddAdmin un)
 
-tryRemoveAdmin :: Permissions Admins -> Callbacks Admins -> Username -> IO Bool
+tryRemoveAdmin :: forall ctx. Typeable ctx => Permissions (Admins ctx) -> Callbacks (Admins ctx) -> Username -> IO Bool
 tryRemoveAdmin permissions callbacks un = fmap isJust do
   tryAmend permissions callbacks AdminsContext AdminsName
     (RemoveAdmin un)
 
-isAdmin :: Username -> IO Bool
+isAdmin :: forall (domain :: *). Typeable domain => Username -> IO Bool
 isAdmin un = 
 #ifdef __GHCJS__
-  WS.req WS.Cached (readingAPI @Admins) (readProduct @Admins) (AdminsContext,AdminsName) >>= \case
+  WS.req @domain WS.Cached (readingAPI @(Admins domain)) (readProduct @(Admins domain)) (AdminsContext,AdminsName) >>= \case
     Nothing -> pure False
     Just Admins {..} -> pure (un `elem` admins)
 #else
-  tryReadProduct readPermissions (callbacks Nothing) AdminsContext AdminsName >>= \case
+  tryReadProduct (readPermissions @(Admins domain)) (callbacks @(Admins domain) Nothing) AdminsContext AdminsName >>= \case
     Just Admins {..} -> pure (un `elem` admins)
     _ -> pure False
 #endif
 
-defaultIsOwner :: Ownable a => Username -> Context a -> Name a -> IO Bool
-defaultIsOwner un ctx nm = liftM2 (||) (isOwner un ctx nm) (isAdmin un)
+defaultIsOwner :: forall (domain :: *) a. (Typeable domain, Ownable a) => Username -> Context a -> Maybe (Name a) -> IO Bool
+defaultIsOwner un ctx nm = liftM2 (||) (isOwner un ctx nm) (isAdmin @domain un)
 
-adminPermissions :: Username -> Permissions resource
+adminPermissions :: forall (domain :: *) resource. Typeable domain => Username -> Permissions resource
 adminPermissions un = Permissions {..}
   where
-    canRead     ctx nm      = isAdmin un
-    canCreate   ctx nm res  = isAdmin un
-    canUpdate   ctx nm      = isAdmin un
-    canAmend    ctx nm amnd = isAdmin un
-    canInteract ctx nm actn = isAdmin un
-    canDelete   ctx nm      = isAdmin un
-    canList     ctx         = isAdmin un
-    canEnum                 = isAdmin un
+    canRead     ctx nm      = isAdmin @domain un
+    canCreate   ctx nm res  = isAdmin @domain un
+    canUpdate   ctx nm      = isAdmin @domain un
+    canAmend    ctx nm amnd = isAdmin @domain un
+    canInteract ctx nm actn = isAdmin @domain un
+    canDelete   ctx nm      = isAdmin @domain un
+    canList     ctx         = isAdmin @domain un
+    canEnum                 = isAdmin @domain un
 

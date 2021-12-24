@@ -24,8 +24,9 @@ import Data.Typeable
 import System.IO.Unsafe
 
 unauthenticatedEndpoints
-  :: forall a.
-    ( Typeable a
+  :: forall domain a.
+    ( Typeable domain
+    , Typeable a
 
     , Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -33,15 +34,16 @@ unauthenticatedEndpoints
     , Pathable (Name a), Hashable (Name a), Ord (Name a)
     , ToJSON (Name a), FromJSON (Name a)
     
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
+    , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+    , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
 
-    ) => WebSocket -> Callbacks (Discussion a) -> Callbacks (Meta a) -> Callbacks (Mods a) ->  IO (IO ())
+    ) => WebSocket -> Callbacks (Discussion domain a) -> Callbacks (Meta domain a) -> Callbacks (Mods domain a) ->  IO (IO ())
 unauthenticatedEndpoints = Convoker.unauthenticatedEndpoints 
 
 authenticatedEndpoints 
-  :: forall a. 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
 
     , Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -49,36 +51,36 @@ authenticatedEndpoints
     , Pathable (Name a), Hashable (Name a), Ord (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
-    , Nameable    (Comment a)
-    , Previewable (Comment a)
-    , Processable (Comment a)
-    , Producible  (Comment a)
-    , Amendable   (Comment a)
-    , Previewable (Meta a)
-    , Processable (Meta a)
-    , Producible  (Meta a)
-    , Amendable   (Meta a)
+    , Nameable    (Comment domain a)
+    , Previewable (Comment domain a)
+    , Processable (Comment domain a)
+    , Producible  (Comment domain a)
+    , Amendable   (Comment domain a)
+    , Previewable (Meta domain a)
+    , Processable (Meta domain a)
+    , Producible  (Meta domain a)
+    , Amendable   (Meta domain a)
 
-    , ToJSON (Resource (Meta a)), FromJSON (Resource (Meta a))
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
-    , ToJSON (Action (Meta a)), FromJSON (Action (Meta a))
-    , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
-    , FromJSON (Reaction (Meta a))
+    , ToJSON (Resource (Meta domain a)), FromJSON (Resource (Meta domain a))
+    , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+    , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
+    , ToJSON (Action (Meta domain a)), FromJSON (Action (Meta domain a))
+    , ToJSON (Amend (Meta domain a)), FromJSON (Amend (Meta domain a))
+    , FromJSON (Reaction (Meta domain a))
 
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , ToJSON (Action (Comment a)), FromJSON (Action (Comment a))
-    , ToJSON (Reaction (Comment a)), FromJSON (Reaction (Comment a))
-    , ToJSON (Reaction (Meta a))
-    , ToJSON (Amend (Comment a)), FromJSON (Amend (Comment a))
+    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+    , ToJSON (Action (Comment domain a)), FromJSON (Action (Comment domain a))
+    , ToJSON (Reaction (Comment domain a)), FromJSON (Reaction (Comment domain a))
+    , ToJSON (Reaction (Meta domain a))
+    , ToJSON (Amend (Comment domain a)), FromJSON (Amend (Comment domain a))
       
     ) => WebSocket 
       -> Username 
-      -> Callbacks (Discussion a) 
-      -> Callbacks (Comment a)
-      -> Callbacks (Meta a)
-      -> Callbacks (Mods a)
-      -> Callbacks (UserVotes a)
+      -> Callbacks (Discussion domain a) 
+      -> Callbacks (Comment domain a)
+      -> Callbacks (Meta domain a)
+      -> Callbacks (Mods domain a)
+      -> Callbacks (UserVotes domain a)
       -> IO (IO ())
 authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks = 
   Convoker.authenticatedEndpoints ws un
@@ -93,23 +95,23 @@ authenticatedEndpoints ws un discussionCallbacks commentCallbacks metaCallbacks 
     (interactions (Just un))
 
 threaded 
-  :: forall _role a b. 
+  :: forall domain a b. 
     ( Typeable a
-    , Typeable (_role :: *)
-    , Theme (Comment a)
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , Formable (Resource (Comment a))
-    , Default (Resource (Comment a))
+    , Typeable (domain :: *)
+    , Theme (Comment domain a)
+    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+    , Formable (Resource (Comment domain a))
+    , Default (Resource (Comment domain a))
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
-    , Default (Resource (Comment a))
+    , Default (Resource (Comment domain a))
     , Ord b
-    , FromJSON (Product (Meta a))
-    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment a)) -> (Username -> View) -> ([View] -> [View]) -> (Product (Meta a) -> Product (Comment a) -> b) -> (CommentFormBuilder _role a -> View) -> (CommentBuilder _role a -> View) -> View
+    , FromJSON (Product (Meta domain a))
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment domain a)) -> (Username -> View) -> ([View] -> [View]) -> (Product (Meta domain a) -> Product (Comment domain a) -> b) -> (CommentFormBuilder domain a -> View) -> (CommentBuilder domain a -> View) -> View
 threaded ws ctx nm root withAuthor withContent sorter commentFormBuilder commentBuilder = 
-  discussion @_role @a ws ctx nm root withAuthor withContent (threads @_role @a @b sorter commentFormBuilder commentBuilder)
+  discussion @domain @a ws ctx nm root withAuthor withContent (threads @domain @a @b sorter commentFormBuilder commentBuilder)
 
-threads :: DiscussionLayout _role a b
+threads :: DiscussionLayout domain a b
 threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full = Discussion { comments }, ..} =
   Div <||> 
     ( (useState False $ \State {..} ->

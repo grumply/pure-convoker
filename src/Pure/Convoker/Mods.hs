@@ -28,58 +28,58 @@ import Data.Maybe
 import Data.Typeable
 import GHC.Generics
 
-data Mods (a :: *)
+data Mods (domain :: *) (a :: *)
 
-data instance Resource (Mods a) = RawMods
+data instance Resource (Mods domain a) = RawMods
   { mods :: [Username]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-data instance Product (Mods a) = Mods
+data instance Product (Mods domain a) = Mods
   { mods :: [Username]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-data instance Preview (Mods a) = NoModsPreview
+data instance Preview (Mods domain a) = NoModsPreview
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance (Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a) => Ownable (Mods a) where
-  isOwner un ctx _ = liftM2 (||) (isMod ctx un) (isAdmin un)
+instance (Typeable domain, Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a) => Ownable (Mods domain a) where
+  isOwner un ctx _ = liftM2 (||) (isMod @domain ctx un) (isAdmin @domain un)
 
-data instance Context (Mods a) = ModsContext (Context a)
+data instance Context (Mods domain a) = ModsContext (Context a)
   deriving stock Generic
-deriving instance Eq (Context a) => Eq (Context (Mods a))
-deriving instance Ord (Context a) => Ord (Context (Mods a))
-deriving instance Hashable (Context a) => Hashable (Context (Mods a))
-deriving instance (Typeable a, Pathable (Context a)) => Pathable (Context (Mods a))
-deriving instance ToJSON (Context a) => ToJSON (Context (Mods a))
-deriving instance FromJSON (Context a) => FromJSON (Context (Mods a))
+deriving instance Eq (Context a) => Eq (Context (Mods domain a))
+deriving instance Ord (Context a) => Ord (Context (Mods domain a))
+deriving instance Hashable (Context a) => Hashable (Context (Mods domain a))
+deriving instance (Typeable a, Pathable (Context a)) => Pathable (Context (Mods domain a))
+deriving instance ToJSON (Context a) => ToJSON (Context (Mods domain a))
+deriving instance FromJSON (Context a) => FromJSON (Context (Mods domain a))
 
-data instance Name (Mods a) = ModsName
+data instance Name (Mods domain a) = ModsName
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance Processable (Mods a)
+instance Processable (Mods domain a)
 
-instance Producible (Mods a) where
+instance Producible (Mods domain a) where
   produce _ _ _ RawMods {..} _ = pure Mods {..}
 
-instance Previewable (Mods a) where
+instance Previewable (Mods domain a) where
   preview _ _ _ _ _ = pure NoModsPreview
 
-instance Nameable (Mods a) where
+instance Nameable (Mods domain a) where
   toName _ = ModsName
 
-data instance Action (Mods a) = NoModsAction
+data instance Action (Mods domain a) = NoModsAction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
-data instance Reaction (Mods a) = NoModsReaction
+data instance Reaction (Mods domain a) = NoModsReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Amendable (Mods a) where
-  data Amend (Mods a) = AddMod Username | RemoveMod Username
+instance Amendable (Mods domain a) where
+  data Amend (Mods domain a) = AddMod Username | RemoveMod Username
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
@@ -93,39 +93,44 @@ instance Amendable (Mods a) where
     Nothing
 
 tryCreateMods 
-  :: ( Typeable (a :: *)
-     , Processable (Mods a)
+  :: ( Typeable domain
+     , Typeable a
+     , Processable (Mods domain a)
      , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
-     ) => Permissions (Mods a) -> Callbacks (Mods a) -> Context a -> [Username] -> IO Bool
+     ) => Permissions (Mods domain a) -> Callbacks (Mods domain a) -> Context a -> [Username] -> IO Bool
 tryCreateMods permissions callbacks ctx mods = fmap isJust do
   tryCreate permissions callbacks (ModsContext ctx) (RawMods mods)
 
 tryAddMod 
-  :: ( Typeable (a :: *)
+  :: ( Typeable domain
+     , Typeable a
      , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
-     ) => Permissions (Mods a) -> Callbacks (Mods a) -> Context a -> Username -> IO Bool
+     ) => Permissions (Mods domain a) -> Callbacks (Mods domain a) -> Context a -> Username -> IO Bool
 tryAddMod permissions callbacks ctx mod = fmap isJust do
   tryAmend permissions callbacks (ModsContext ctx) ModsName 
     (AddMod mod)
 
 tryRemoveMod 
-  :: ( Typeable (a :: *)
+  :: ( Typeable domain
+     , Typeable a
      , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
-     ) => Permissions (Mods a) -> Callbacks (Mods a) -> Context a -> Username -> IO Bool
+     ) => Permissions (Mods domain a) -> Callbacks (Mods domain a) -> Context a -> Username -> IO Bool
 tryRemoveMod permissions callbacks ctx mod = fmap isJust do
   tryAmend permissions callbacks (ModsContext ctx) ModsName 
     (RemoveMod mod)
 
 modPermissions 
-  :: ( Typeable (a :: *)
-     , Pathable (Context (Mods a)), Hashable (Context (Mods a)), Ord (Context a)
-     ) => Username -> Permissions (Mods a)
+  :: forall domain a. 
+     ( Typeable domain
+     , Typeable a
+     , Pathable (Context (Mods domain a)), Hashable (Context (Mods domain a)), Ord (Context a)
+     ) => Username -> Permissions (Mods domain a)
 modPermissions un = readPermissions { canAmend = canAmend' }
   where
-    canAmend' ctx _ _ = isMod ctx un
+    canAmend' ctx _ _ = isMod @domain ctx un
 
-isMod :: (Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a) => Context a -> Username -> IO Bool
+isMod :: forall (domain :: *) a. (Typeable domain, Pathable (Context a), Hashable (Context a), Ord (Context a), Typeable a) => Context a -> Username -> IO Bool
 isMod ctx un =
-  tryReadProduct fullPermissions (callbacks (Just un)) (ModsContext ctx) ModsName >>= \case
+  tryReadProduct (fullPermissions @(Mods domain a)) (callbacks @(Mods domain a) (Just un)) (ModsContext @domain ctx) (ModsName @domain) >>= \case
     Just Mods {..} | un `elem` mods -> pure True
-    _ -> isAdmin un
+    _ -> isAdmin @domain un

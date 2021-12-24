@@ -1,6 +1,5 @@
 module Pure.Convoker (module Export, module Pure.Convoker) where
 
-import Pure.Convoker.Admins as Export
 import Pure.Convoker.Comment as Export
 import Pure.Convoker.Discussion as Export
 import Pure.Convoker.Meta as Export
@@ -20,27 +19,28 @@ import Data.Hashable
 
 import Data.Typeable
 
-type Convokable a = 
+type Convokable domain a = 
   ( Pathable (Context a)
   , ToJSON (Context a), FromJSON (Context a)
 
   , Pathable (Name a)
   , ToJSON (Name a), FromJSON (Name a)
 
-  , Amendable (Comment a)
-  , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-  , ToJSON (Amend (Comment a)), FromJSON (Amend (Comment a))
+  , Amendable (Comment domain a)
+  , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+  , ToJSON (Amend (Comment domain a)), FromJSON (Amend (Comment domain a))
 
-  , Amendable (Meta a)
-  , ToJSON (Resource (Meta a)), FromJSON (Resource (Meta a))
-  , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
-  , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-  , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
+  , Amendable (Meta domain a)
+  , ToJSON (Resource (Meta domain a)), FromJSON (Resource (Meta domain a))
+  , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
+  , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+  , ToJSON (Amend (Meta domain a)), FromJSON (Amend (Meta domain a))
   ) 
 
 convoke
-  :: forall a.
-    ( Typeable a
+  :: forall domain a.
+    ( Typeable domain
+    , Typeable a
 
     , Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -48,23 +48,23 @@ convoke
     , Pathable (Name a), Hashable (Name a), Ord (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
-    , Amendable (Comment a)
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , ToJSON (Amend (Comment a)), FromJSON (Amend (Comment a))
+    , Amendable (Comment domain a)
+    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+    , ToJSON (Amend (Comment domain a)), FromJSON (Amend (Comment domain a))
 
-    , Amendable (Meta a)
-    , ToJSON (Resource (Meta a)), FromJSON (Resource (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
+    , Amendable (Meta domain a)
+    , ToJSON (Resource (Meta domain a)), FromJSON (Resource (Meta domain a))
+    , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
+    , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+    , ToJSON (Amend (Meta domain a)), FromJSON (Amend (Meta domain a))
 
     ) => IO ()
 convoke = do
-  conjure @(Discussion a) 
-  conjure @(Comment a)
-  conjure @(Meta a)
-  conjure @(Mods a)
-  conjure @(UserVotes a)
+  conjure @(Discussion domain a) 
+  conjure @(Comment domain a)
+  conjure @(Meta domain a)
+  conjure @(Mods domain a)
+  conjure @(UserVotes domain a)
 
 -- | This should be considered an extensible API for managing an unauthenticated
 -- user's discussion endpoints. You can choose to satisfy some of the 
@@ -78,8 +78,9 @@ convoke = do
 -- 
 -- Returns a callback that will deactivate the endpoints.
 unauthenticatedEndpoints 
-  :: forall (a :: *). 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
 
     , Pathable (Context a), Ord (Context a), Hashable (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -87,14 +88,14 @@ unauthenticatedEndpoints
     , Pathable (Name a), Ord (Name a), Hashable (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
+    , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+    , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
 
-    ) => WebSocket -> Callbacks (Discussion a) -> Callbacks (Meta a) -> Callbacks (Mods a) ->  IO (IO ())
+    ) => WebSocket -> Callbacks (Discussion domain a) -> Callbacks (Meta domain a) -> Callbacks (Mods domain a) ->  IO (IO ())
 unauthenticatedEndpoints socket discussionCallbacks metaCallbacks modsCallbacks = do
-  discussion <- enact socket (reading @(Discussion a) readPermissions discussionCallbacks)
-  meta       <- enact socket (reading @(Meta a) readPermissions metaCallbacks)
-  mods       <- enact socket (reading @(Mods a) readPermissions modsCallbacks)
+  discussion <- enact socket (reading @(Discussion domain a) readPermissions discussionCallbacks)
+  meta       <- enact socket (reading @(Meta domain a) readPermissions metaCallbacks)
+  mods       <- enact socket (reading @(Mods domain a) readPermissions modsCallbacks)
   pure do
     repeal discussion
     repeal meta
@@ -108,8 +109,8 @@ unauthenticatedEndpoints socket discussionCallbacks metaCallbacks modsCallbacks 
 -- required constraints and the only required parameters are the WebSocket, the
 -- Username, and Callbacks for extensibility.
 --
--- It would be easy to simplify the constraints here as `Conjurable (Meta a)`
--- and `Conjurable (Comment a)`, but that would obscure the nature of this
+-- It would be easy to simplify the constraints here as `Conjurable (Meta domain a)`
+-- and `Conjurable (Comment domain a)`, but that would obscure the nature of this
 -- function by hiding what exactly needs to be implemented for a fully-custom 
 -- discussion implemention. That is, this type signature can be read as a
 -- guide for implementing your own, customized, discussion types, as they
@@ -136,8 +137,9 @@ unauthenticatedEndpoints socket discussionCallbacks metaCallbacks modsCallbacks 
 --
 -- Returns a callback that will deactivate the endpoints.
 authenticatedEndpoints 
-  :: forall (a :: *). 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
 
     , Pathable (Context a), Ord (Context a), Hashable (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -145,42 +147,42 @@ authenticatedEndpoints
     , Pathable (Name a), Ord (Name a), Hashable (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
-    , Nameable (Comment a)
-    , Processable (Comment a)
-    , Producible (Comment a)
-    , Amendable (Comment a)
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , ToJSON (Action (Comment a)), FromJSON (Action (Comment a))
-    , ToJSON (Reaction (Comment a)), FromJSON (Reaction (Comment a))
-    , ToJSON (Amend (Comment a)), FromJSON (Amend (Comment a))
+    , Nameable (Comment domain a)
+    , Processable (Comment domain a)
+    , Producible (Comment domain a)
+    , Amendable (Comment domain a)
+    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+    , ToJSON (Action (Comment domain a)), FromJSON (Action (Comment domain a))
+    , ToJSON (Reaction (Comment domain a)), FromJSON (Reaction (Comment domain a))
+    , ToJSON (Amend (Comment domain a)), FromJSON (Amend (Comment domain a))
 
-    , Processable (Meta a)
-    , Producible (Meta a)
-    , Previewable (Meta a)
-    , Amendable (Meta a)
-    , ToJSON (Resource (Meta a)), FromJSON (Resource (Meta a))
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
-    , ToJSON (Action (Meta a)), FromJSON (Action (Meta a))
-    , ToJSON (Reaction (Meta a)), FromJSON (Reaction (Meta a))
-    , ToJSON (Amend (Meta a)), FromJSON (Amend (Meta a))
+    , Processable (Meta domain a)
+    , Producible (Meta domain a)
+    , Previewable (Meta domain a)
+    , Amendable (Meta domain a)
+    , ToJSON (Resource (Meta domain a)), FromJSON (Resource (Meta domain a))
+    , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+    , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
+    , ToJSON (Action (Meta domain a)), FromJSON (Action (Meta domain a))
+    , ToJSON (Reaction (Meta domain a)), FromJSON (Reaction (Meta domain a))
+    , ToJSON (Amend (Meta domain a)), FromJSON (Amend (Meta domain a))
 
-    , DefaultPermissions (Mods a)
-    , DefaultPermissions (UserVotes a)
+    , DefaultPermissions (Mods domain a)
+    , DefaultPermissions (UserVotes domain a)
 
-    , DefaultCallbacks (UserVotes a) 
+    , DefaultCallbacks (UserVotes domain a) 
 
     ) => WebSocket 
       -> Username 
-      -> Permissions (Comment a) 
-      -> Permissions (Meta a) 
-      -> Callbacks (Discussion a) 
-      -> Callbacks (Comment a)
-      -> Callbacks (Meta a)
-      -> Callbacks (Mods a)
-      -> Callbacks (UserVotes a)
-      -> Interactions (Comment a) 
-      -> Interactions (Meta a) 
+      -> Permissions (Comment domain a) 
+      -> Permissions (Meta domain a) 
+      -> Callbacks (Discussion domain a) 
+      -> Callbacks (Comment domain a)
+      -> Callbacks (Meta domain a)
+      -> Callbacks (Mods domain a)
+      -> Callbacks (UserVotes domain a)
+      -> Interactions (Comment domain a) 
+      -> Interactions (Meta domain a) 
       -> IO (IO ())
 authenticatedEndpoints socket un commentPermissions metaPermissions discussionCallbacks commentCallbacks metaCallbacks modsCallbacks userVotesCallbacks commentInteractions metaInteractions = do 
   -- Notes:
@@ -190,16 +192,16 @@ authenticatedEndpoints socket un commentPermissions metaPermissions discussionCa
   --     discussions are manually created when their linked resource 
   --     is created.
 
-  discussionReading   <- enact socket (reading @(Discussion a) readPermissions discussionCallbacks)
-  commentReading      <- enact socket (reading @(Comment a) commentPermissions commentCallbacks)
-  metaReading         <- enact socket (reading @(Meta a) metaPermissions metaCallbacks)
-  modsReading         <- enact socket (reading @(Mods a) readPermissions modsCallbacks)
-  userVotesReading    <- enact socket (reading @(UserVotes a) (permissions (Just un)) userVotesCallbacks)
+  discussionReading   <- enact socket (reading @(Discussion domain a) readPermissions discussionCallbacks)
+  commentReading      <- enact socket (reading @(Comment domain a) commentPermissions commentCallbacks)
+  metaReading         <- enact socket (reading @(Meta domain a) metaPermissions metaCallbacks)
+  modsReading         <- enact socket (reading @(Mods domain a) readPermissions modsCallbacks)
+  userVotesReading    <- enact socket (reading @(UserVotes domain a) (permissions (Just un)) userVotesCallbacks)
 
-  commentPublishing   <- enact socket (publishing @(Comment a) commentPermissions commentCallbacks commentInteractions)
-  metaPublishing      <- enact socket (publishing @(Meta a) metaPermissions metaCallbacks metaInteractions)
-  modsPublishing      <- enact socket (publishing @(Mods a) (permissions (Just un)) modsCallbacks (interactions (Just un)))
-  userVotesPublishing <- enact socket (publishing @(UserVotes a) (permissions (Just un)) userVotesCallbacks (interactions (Just un)))
+  commentPublishing   <- enact socket (publishing @(Comment domain a) commentPermissions commentCallbacks commentInteractions)
+  metaPublishing      <- enact socket (publishing @(Meta domain a) metaPermissions metaCallbacks metaInteractions)
+  modsPublishing      <- enact socket (publishing @(Mods domain a) (permissions (Just un)) modsCallbacks (interactions (Just un)))
+  userVotesPublishing <- enact socket (publishing @(UserVotes domain a) (permissions (Just un)) userVotesCallbacks (interactions (Just un)))
 
   pure do
     repeal discussionReading
@@ -214,8 +216,9 @@ authenticatedEndpoints socket un commentPermissions metaPermissions discussionCa
     repeal userVotesPublishing 
 
 convokerCache 
-  :: forall a. 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
 
     , Pathable (Context a), Ord (Context a), Hashable (Context a)
     , ToJSON (Context a), FromJSON (Context a)
@@ -223,10 +226,10 @@ convokerCache
     , Pathable (Name a), Ord (Name a), Hashable (Name a)
     , ToJSON (Name a), FromJSON (Name a)
 
-    , ToJSON (Product (Meta a)), FromJSON (Product (Meta a))
-    , ToJSON (Preview (Meta a)), FromJSON (Preview (Meta a))
+    , ToJSON (Product (Meta domain a)), FromJSON (Product (Meta domain a))
+    , ToJSON (Preview (Meta domain a)), FromJSON (Preview (Meta domain a))
     ) => IO ()
 convokerCache = do
-  cache @(Discussion a)
-  cache @(Mods a)
-  cache @(Meta a)
+  cache @(Discussion domain a)
+  cache @(Mods domain a)
+  cache @(Meta domain a)

@@ -29,51 +29,51 @@ import qualified Data.Graph as G
 import Data.Typeable
 import GHC.Generics hiding (Meta)
 
-data Discussion (a :: *)
+data Discussion (domain :: *) (a :: *)
 
-data instance Resource (Discussion a) = RawDiscussion
+data instance Resource (Discussion domain a) = RawDiscussion
   { context  :: Context a
   , name     :: Name a
-  , comments :: [(Product (Comment a),Preview (Comment a))]
+  , comments :: [(Product (Comment domain a),Preview (Comment domain a))]
   } deriving stock Generic
-deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Product (Comment a)),ToJSON (Preview (Comment a))) => ToJSON (Resource (Discussion a))
-deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Product (Comment a)),FromJSON (Preview (Comment a))) => FromJSON (Resource (Discussion a))
+deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Product (Comment domain a)),ToJSON (Preview (Comment domain a))) => ToJSON (Resource (Discussion domain a))
+deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Product (Comment domain a)),FromJSON (Preview (Comment domain a))) => FromJSON (Resource (Discussion domain a))
 
-data instance Product (Discussion a) = Discussion
+data instance Product (Discussion domain a) = Discussion
   { context  :: Context a
   , name     :: Name a
-  , comments :: [Product (Comment a)]
+  , comments :: [Product (Comment domain a)]
   } deriving stock Generic
-deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Product (Comment a))) => ToJSON (Product (Discussion a))
-deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Product (Comment a))) => FromJSON (Product (Discussion a))
+deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Product (Comment domain a))) => ToJSON (Product (Discussion domain a))
+deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Product (Comment domain a))) => FromJSON (Product (Discussion domain a))
 
-data instance Preview (Discussion a) = DiscussionPreview
+data instance Preview (Discussion domain a) = DiscussionPreview
   { context  :: Context a
   , name     :: Name a
-  , comments :: [Preview (Comment a)]
+  , comments :: [Preview (Comment domain a)]
   } deriving stock Generic
-deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Preview (Comment a))) => ToJSON (Preview (Discussion a))
-deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Preview (Comment a))) => FromJSON (Preview (Discussion a))
+deriving instance (ToJSON (Context a), ToJSON (Name a), ToJSON (Preview (Comment domain a))) => ToJSON (Preview (Discussion domain a))
+deriving instance (FromJSON (Context a), FromJSON (Name a), FromJSON (Preview (Comment domain a))) => FromJSON (Preview (Discussion domain a))
 
-data instance Context (Discussion a) = DiscussionContext (Context a) (Name a)
+data instance Context (Discussion domain a) = DiscussionContext (Context a) (Name a)
   deriving stock Generic
-deriving instance (Eq (Context a),Eq (Name a)) => Eq (Context (Discussion a))
-deriving instance (Ord (Context a),Ord (Name a)) => Ord (Context (Discussion a))
-deriving instance (Hashable (Context a),Hashable (Name a)) => Hashable (Context (Discussion a))
-deriving instance (Typeable a, Pathable (Context a),Pathable (Name a)) => Pathable (Context (Discussion a))
-deriving instance (ToJSON (Context a),ToJSON (Name a)) => ToJSON (Context (Discussion a))
-deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context (Discussion a))
+deriving instance (Eq (Context a),Eq (Name a)) => Eq (Context (Discussion domain a))
+deriving instance (Ord (Context a),Ord (Name a)) => Ord (Context (Discussion domain a))
+deriving instance (Hashable (Context a),Hashable (Name a)) => Hashable (Context (Discussion domain a))
+deriving instance (Typeable a, Pathable (Context a),Pathable (Name a)) => Pathable (Context (Discussion domain a))
+deriving instance (ToJSON (Context a),ToJSON (Name a)) => ToJSON (Context (Discussion domain a))
+deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context (Discussion domain a))
 
-data instance Name (Discussion a) = DiscussionName
+data instance Name (Discussion domain a) = DiscussionName
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance Nameable (Discussion a) where
+instance Nameable (Discussion domain a) where
   toName _ = DiscussionName
 
-instance Amendable (Discussion a) where
-  data Amend (Discussion a) 
-    = SetComment (Product (Comment a)) (Preview (Comment a))
+instance Amendable (Discussion domain a) where
+  data Amend (Discussion domain a) 
+    = SetComment (Product (Comment domain a)) (Preview (Comment domain a))
     deriving stock Generic
     
   amend (SetComment pro@Comment { key = target } pre) RawDiscussion {..}
@@ -84,46 +84,46 @@ instance Amendable (Discussion a) where
     | otherwise 
     = Just RawDiscussion { comments = (pro,pre) : comments, .. }
 
-deriving instance (ToJSON (Product (Comment a)), ToJSON (Preview (Comment a))) => ToJSON (Amend (Discussion a))
-deriving instance (FromJSON (Product (Comment a)), FromJSON (Preview (Comment a))) => FromJSON (Amend (Discussion a))
+deriving instance (ToJSON (Product (Comment domain a)), ToJSON (Preview (Comment domain a))) => ToJSON (Amend (Discussion domain a))
+deriving instance (FromJSON (Product (Comment domain a)), FromJSON (Preview (Comment domain a))) => FromJSON (Amend (Discussion domain a))
 
-instance Processable (Discussion a)
+instance Processable (Discussion domain a)
 
-instance Producible (Discussion a) where
+instance Producible (Discussion domain a) where
   produce _ _ _ RawDiscussion {..} _ =
     pure Discussion { comments = fmap fst comments, .. }
 
-instance Previewable (Discussion a) where
+instance Previewable (Discussion domain a) where
   preview _ _ _ RawDiscussion {..} _ =
     pure DiscussionPreview { comments = fmap snd comments, .. }
 
-data instance Action (Discussion a) = NoDiscussionAction
+data instance Action (Discussion domain a) = NoDiscussionAction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-data instance Reaction (Discussion a) = NoDiscussionReaction
+data instance Reaction (Discussion domain a) = NoDiscussionReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Ownable (Discussion a) where
-  isOwner un _ _ = isAdmin un
+instance Typeable domain => Ownable (Discussion domain a) where
+  isOwner un _ _ = isAdmin @domain un
 
-data DiscussionBuilder _role a = DiscussionBuilder
+data DiscussionBuilder domain a = DiscussionBuilder
   { socket :: WebSocket
   , context :: Context a
   , name :: Name a
   , user :: Maybe Username
-  , root :: Maybe (Key (Comment a))
+  , root :: Maybe (Key (Comment domain a))
   , admin :: Bool
   , mod :: Bool
   , onRefresh :: IO ()
   , withAuthor :: Username -> View
   , withContent :: [View] -> [View]
-  , admins :: Product Admins
-  , mods :: Product (Mods a)
-  , votes :: Maybe (Product (UserVotes a))
-  , meta :: Product (Meta a)
-  , full :: Product (Discussion a)
+  , admins :: Product (Admins domain)
+  , mods :: Product (Mods domain a)
+  , votes :: Maybe (Product (UserVotes domain a))
+  , meta :: Product (Meta domain a)
+  , full :: Product (Discussion domain a)
   }
 
 -- Core discussion view generator. Given an active connection, a resource's
@@ -131,16 +131,16 @@ data DiscussionBuilder _role a = DiscussionBuilder
 -- will build the `DiscussionBuilder` context and render it if the necessary
 -- resources can be retrieved.
 discussion 
-  :: forall _role a. 
+  :: forall domain a. 
     ( Typeable a
-    , Typeable (_role :: *)
+    , Typeable (domain :: *)
     , ToJSON (Context a), FromJSON (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Eq (Name a)
-    , FromJSON (Product (Meta a))
-    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment a)) -> (Username -> View) -> ([View] -> [View]) -> (DiscussionBuilder _role a -> View) -> View
+    , FromJSON (Product (Meta domain a))
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment domain a)) -> (Username -> View) -> ([View] -> [View]) -> (DiscussionBuilder domain a -> View) -> View
 discussion socket ctx nm root withAuthor withContent viewer = 
 
-  withToken @_role $ \mt ->
+  withToken @domain $ \mt ->
     let user = fmap (\(Token (un,_)) -> un) mt in 
 
     -- simple switch used to trigger re-request and re-render
@@ -163,7 +163,7 @@ discussion socket ctx nm root withAuthor withContent viewer =
           producingKeyed (ctx,nm,user) producer $ \(context,name,user) -> 
 
             let 
-              consumer :: Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)) -> View
+              consumer :: Maybe (Product (Admins domain),Product (Mods domain a),Maybe (Product (UserVotes domain a)),Product (Meta domain a),Product (Discussion domain a)) -> View
               consumer Nothing = Null
               consumer (Just (admins,mods,votes,meta,full)) =
                 let
@@ -178,13 +178,13 @@ discussion socket ctx nm root withAuthor withContent viewer =
                       _ -> False
 
                 in
-                  viewer (DiscussionBuilder {..} :: DiscussionBuilder _role a)
+                  viewer (DiscussionBuilder {..} :: DiscussionBuilder domain a)
 
             in
               consuming consumer
 
   where
-    producer :: (Context a,Name a,Maybe Username) -> IO (Maybe (Product Admins,Product (Mods a),Maybe (Product (UserVotes a)),Product (Meta a),Product (Discussion a)))
+    producer :: (Context a,Name a,Maybe Username) -> IO (Maybe (Product (Admins domain),Product (Mods domain a),Maybe (Product (UserVotes domain a)),Product (Meta domain a),Product (Discussion domain a)))
     producer (ctx,nm,mun) = do
 
       let 
@@ -230,9 +230,9 @@ discussion socket ctx nm root withAuthor withContent viewer =
       f (putMVar mv)
       pure (takeMVar mv)
 
-type CommentSorter a b = Ord b => Product (Meta a) -> Product (Comment a) -> b
+type CommentSorter domain a b = Ord b => Product (Meta domain a) -> Product (Comment domain a) -> b
 
-data CommentBuilder _role a = CommentBuilder
+data CommentBuilder domain a = CommentBuilder
   { socket :: WebSocket
   , context :: Context a
   , name :: Name a
@@ -243,19 +243,19 @@ data CommentBuilder _role a = CommentBuilder
   , children :: [View]
   , withAuthor :: Username -> View
   , withContent :: [View] -> [View]
-  , root :: Maybe (Key (Comment a))
-  , parent :: Maybe (Key (Comment a)) 
-  , previous :: Maybe (Key (Comment a))
-  , next :: Maybe (Key (Comment a))
+  , root :: Maybe (Key (Comment domain a))
+  , parent :: Maybe (Key (Comment domain a)) 
+  , previous :: Maybe (Key (Comment domain a))
+  , next :: Maybe (Key (Comment domain a))
   , size :: Int
-  , admins :: Product Admins
-  , mods :: Product (Mods a)
-  , votes :: Maybe (Product (UserVotes a))
-  , meta :: Product (Meta a)
-  , comment :: Product (Comment a)
+  , admins :: Product (Admins domain)
+  , mods :: Product (Mods domain a)
+  , votes :: Maybe (Product (UserVotes domain a))
+  , meta :: Product (Meta domain a)
+  , comment :: Product (Comment domain a)
   }
 
-data CommentFormBuilder _role a = CommentFormBuilder
+data CommentFormBuilder domain a = CommentFormBuilder
   { socket :: WebSocket
   , context :: Context a
   , name :: Name a
@@ -263,24 +263,24 @@ data CommentFormBuilder _role a = CommentFormBuilder
   , onRefresh :: IO ()
   , onCancel :: IO ()
   , withContent :: [View] -> [View]
-  , parent :: Maybe (Key (Comment a))
-  , viewer :: CommentBuilder _role a -> View
-  , comment :: Maybe (Resource (Comment a))
+  , parent :: Maybe (Key (Comment domain a))
+  , viewer :: CommentBuilder domain a -> View
+  , comment :: Maybe (Resource (Comment domain a))
   }
 
-type DiscussionLayout (_role :: *) a b =
+type DiscussionLayout (domain :: *) a b =
     ( Typeable a
-    , Typeable _role
-    , Theme (Comment a)
+    , Typeable domain
+    , Theme (Comment domain a)
     , Pathable (Context a), ToJSON (Context a), FromJSON (Context a)
     , Pathable (Name a), ToJSON (Name a), FromJSON (Name a)
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , Formable (Resource (Comment a))
-    , Default (Resource (Comment a))
+    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+    , Formable (Resource (Comment domain a))
+    , Default (Resource (Comment domain a))
     , Ord b
-    ) => CommentSorter a b -> (CommentFormBuilder _role a -> View) -> (CommentBuilder _role a -> View) -> (DiscussionBuilder _role a -> View)
+    ) => CommentSorter domain a b -> (CommentFormBuilder domain a -> View) -> (CommentBuilder domain a -> View) -> (DiscussionBuilder domain a -> View)
 
-linear :: DiscussionLayout _role a b
+linear :: DiscussionLayout domain a b
 linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | Discussion {..} <- full =
   Div <||>
     (( useState False $ \State {..} ->
@@ -312,72 +312,75 @@ linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | D
         }
 
 extendCommentCallbacks 
-  :: forall a. 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-    ) => Permissions (Discussion a) -> Callbacks (Discussion a) -> Callbacks (Comment a) -> Callbacks (Comment a)
+    ) => Permissions (Discussion domain a) -> Callbacks (Discussion domain a) -> Callbacks (Comment domain a) -> Callbacks (Comment domain a)
 extendCommentCallbacks discussionPermissions discussionCallbacks cbs = cbs
   { onCreate = \(CommentContext ctx nm) cnm res pro pre lst -> void do
     onCreate cbs (CommentContext ctx nm) cnm res pro pre lst
-    tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
+    tryAmend @(Discussion domain a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
   
   , onUpdate = \(CommentContext ctx nm) cnm res pro pre lst -> void do
     onUpdate cbs (CommentContext ctx nm) cnm res pro pre lst
-    tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
+    tryAmend @(Discussion domain a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
   
   , onAmend = \(CommentContext ctx nm) cnm res pro pre lst amnd -> void do
     onAmend cbs (CommentContext ctx nm) cnm res pro pre lst amnd
-    tryAmend @(Discussion a) discussionPermissions discussionCallbacks 
+    tryAmend @(Discussion domain a) discussionPermissions discussionCallbacks 
       (DiscussionContext ctx nm) DiscussionName 
         (SetComment pro pre)
   
   }
 
 createDiscussion 
-  :: forall a. 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-    , Default (Resource (Meta a))
-    , Amendable (Meta a)
-    , Processable (Meta a)
-    , Previewable (Meta a)
-    , Producible (Meta a)
-    , FromJSON (Resource (Meta a)), ToJSON (Resource (Meta a))
-    , FromJSON (Product (Meta a)), ToJSON (Product (Meta a))
-    , FromJSON (Preview (Meta a)), ToJSON (Preview (Meta a))
-    , FromJSON (Amend (Meta a)), ToJSON (Amend (Meta a))
+    , Default (Resource (Meta domain a))
+    , Amendable (Meta domain a)
+    , Processable (Meta domain a)
+    , Previewable (Meta domain a)
+    , Producible (Meta domain a)
+    , FromJSON (Resource (Meta domain a)), ToJSON (Resource (Meta domain a))
+    , FromJSON (Product (Meta domain a)), ToJSON (Product (Meta domain a))
+    , FromJSON (Preview (Meta domain a)), ToJSON (Preview (Meta domain a))
+    , FromJSON (Amend (Meta domain a)), ToJSON (Amend (Meta domain a))
     ) => Context a -> Name a -> [Username] -> IO ()
 createDiscussion ctx nm mods = void do
-  tryCreate @(Discussion a) fullPermissions def (DiscussionContext ctx nm) (RawDiscussion ctx nm []) 
-  tryReadResource fullPermissions def (ModsContext ctx) ModsName >>= \case
+  tryCreate @(Discussion domain a) fullPermissions def (DiscussionContext ctx nm) (RawDiscussion ctx nm []) 
+  tryReadResource (fullPermissions @(Mods domain a)) def (ModsContext ctx) ModsName >>= \case
     Just RawMods {} -> pure ()
-    _ -> void (tryCreate @(Mods a) fullPermissions def (ModsContext ctx) (RawMods mods))
-  tryCreate @(Meta a) fullPermissions def (MetaContext ctx nm) (def :: Resource (Meta a))
+    _ -> void (tryCreate @(Mods domain a) fullPermissions def (ModsContext ctx) (RawMods mods))
+  tryCreate @(Meta domain a) fullPermissions def (MetaContext ctx nm) (def :: Resource (Meta domain a))
 
 addDiscussionCreationCallbacks 
-  :: forall a. 
-    ( Typeable a
+  :: forall domain a. 
+    ( Typeable domain
+    , Typeable a
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-    , Default (Resource (Meta a))
-    , Amendable (Meta a)
-    , Processable (Meta a)
-    , Previewable (Meta a)
-    , Producible (Meta a)
-    , FromJSON (Resource (Meta a)), ToJSON (Resource (Meta a))
-    , FromJSON (Product (Meta a)), ToJSON (Product (Meta a))
-    , FromJSON (Preview (Meta a)), ToJSON (Preview (Meta a))
-    , FromJSON (Amend (Meta a)), ToJSON (Amend (Meta a))
+    , Default (Resource (Meta domain a))
+    , Amendable (Meta domain a)
+    , Processable (Meta domain a)
+    , Previewable (Meta domain a)
+    , Producible (Meta domain a)
+    , FromJSON (Resource (Meta domain a)), ToJSON (Resource (Meta domain a))
+    , FromJSON (Product (Meta domain a)), ToJSON (Product (Meta domain a))
+    , FromJSON (Preview (Meta domain a)), ToJSON (Preview (Meta domain a))
+    , FromJSON (Amend (Meta domain a)), ToJSON (Amend (Meta domain a))
     ) => [Username] -> Callbacks a -> Callbacks a
 addDiscussionCreationCallbacks mods cbs = cbs { onCreate = onCreate' }
   where
     onCreate' ctx nm res pro pre lst = do
-      createDiscussion ctx nm mods
+      createDiscussion @domain ctx nm mods
       onCreate cbs ctx nm res pro pre lst
 

@@ -41,48 +41,48 @@ ordered)
 -}
 
 simpleThreaded 
-  :: forall _role a. 
+  :: forall domain a. 
     ( Typeable a
-    , Typeable (_role :: *)
-    , Theme (Comment a)
-    , ToJSON (Resource (Comment a)), FromJSON (Resource (Comment a))
-    , Formable (Resource (Comment a))
-    , Default (Resource (Comment a))
+    , Typeable (domain :: *)
+    , Theme (Comment domain a)
+    , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
+    , Formable (Resource (Comment domain a))
+    , Default (Resource (Comment domain a))
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
-    , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment a)
+    , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment domain a)
     , Fieldable Markdown
-    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment a)) -> (Username -> View) -> ([View] -> [View]) -> View
-simpleThreaded ws ctx nm root withAuthor withContent = threaded @_role ws ctx nm root withAuthor withContent simpleSorter simpleCommentForm (run . SimpleComment)
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment domain a)) -> (Username -> View) -> ([View] -> [View]) -> View
+simpleThreaded ws ctx nm root withAuthor withContent = threaded @domain ws ctx nm root withAuthor withContent simpleSorter simpleCommentForm (run . SimpleComment)
 
-newtype SimpleSorter a = SimpleSorter (Int,Key (Comment a))
-instance Eq (SimpleSorter a) where
+newtype SimpleSorter domain a = SimpleSorter (Int,Key (Comment domain a))
+instance Eq (SimpleSorter domain a) where
   (==) (SimpleSorter ss0) (SimpleSorter ss1) = ss0 == ss1
-instance Ord (SimpleSorter a) where
+instance Ord (SimpleSorter domain a) where
   compare (SimpleSorter (c0,k0)) (SimpleSorter (c1,k1)) =
     case compare c1 c0 of
       EQ -> compare k0 k1
       x  -> x
 
-simpleSorter :: CommentSorter a (SimpleSorter a)
+simpleSorter :: CommentSorter domain a (SimpleSorter domain a)
 simpleSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (List.lookup key vs),key)
 
 simpleCommentForm 
-  :: forall (_role :: *) (a :: *). 
+  :: forall (domain :: *) (a :: *). 
     ( Typeable a
-    , Typeable _role
+    , Typeable domain
     , ToJSON (Context a), FromJSON (Context a)
     , ToJSON (Name a), FromJSON (Name a)
     , Fieldable Markdown
-    ) => CommentFormBuilder _role a -> View
-simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id defaultOnRegistered) go
+    ) => CommentFormBuilder domain a -> View
+simpleCommentForm CommentFormBuilder {..} = authorize @domain (Access socket id defaultOnRegistered) go
   where
     go (Token (un,_)) =
       let 
-        onPreview :: Resource (Comment a) -> IO View
+        onPreview :: Resource (Comment domain a) -> IO View
         onPreview c = do
-          r <- sync (request (publishingAPI @(Comment a)) socket (previewResource @(Comment a)) 
-                (CommentContext context name,(c :: Resource (Comment a)) { author = un, parents = Parents $ maybeToList parent }))
+          r <- sync (request (publishingAPI @(Comment domain a)) socket (previewResource @(Comment domain a)) 
+                (CommentContext context name,(c :: Resource (Comment domain a)) { author = un, parents = Parents $ maybeToList parent }))
           case r of
             Nothing -> pure "Invalid comment."
             Just (_,_,_,comment,_) -> pure do
@@ -104,11 +104,11 @@ simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id d
                     viewer CommentBuilder {..}
                 ]
 
-        onSubmit :: Resource (Comment a) -> IO ()
+        onSubmit :: Resource (Comment domain a) -> IO ()
         onSubmit c@RawComment { content, key }
           | Just _ <- comment = do
             b <- sync do
-              request (publishingAPI @(Comment a)) socket (amendResource @(Comment a)) 
+              request (publishingAPI @(Comment domain a)) socket (amendResource @(Comment domain a)) 
                 (CommentContext context name,CommentName key,SetContent content)
             if b then void do 
               storeScrollPosition >> onRefresh >> restore
@@ -116,8 +116,8 @@ simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id d
               pure ()
           | otherwise = do
             mi <- sync do
-              request (publishingAPI @(Comment a)) socket (createResource @(Comment a)) 
-                (CommentContext context name,(c :: Resource (Comment a)) { author = un, parents = Parents $ maybeToList parent })
+              request (publishingAPI @(Comment domain a)) socket (createResource @(Comment domain a)) 
+                (CommentContext context name,(c :: Resource (Comment domain a)) { author = un, parents = Parents $ maybeToList parent })
             for_ mi (\_ -> storeScrollPosition >> onRefresh >> restore)
 
       in 
@@ -134,24 +134,24 @@ simpleCommentForm CommentFormBuilder {..} = authorize @_role (Access socket id d
           delay (Millisecond * 100)
           addAnimation restoreScrollPosition
 
-newtype SimpleComment (_role :: *) (a :: *) = SimpleComment (CommentBuilder _role a)
+newtype SimpleComment (domain :: *) (a :: *) = SimpleComment (CommentBuilder domain a)
 
 instance 
-  ( Typeable _role
+  ( Typeable domain
   , Typeable a
   , ToJSON (Context a), FromJSON (Context a)
   , ToJSON (Name a), FromJSON (Name a)
-  , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment a)
+  , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment domain a)
   , Fieldable Markdown
-  ) => Component (SimpleComment _role a) where
-  data Model (SimpleComment _role a) = SimpleCommentModel
+  ) => Component (SimpleComment domain a) where
+  data Model (SimpleComment domain a) = SimpleCommentModel
     { total     :: Int
     , vote      :: Maybe Bool
-    , editing   :: Maybe (Resource (Comment a))
+    , editing   :: Maybe (Resource (Comment domain a))
     , replying  :: Bool
     , collapsed :: Bool
     , deleted   :: Bool
-    , comment   :: Product (Comment a)
+    , comment   :: Product (Comment domain a)
     }
 
   initialize (SimpleComment CommentBuilder { comment = c@Comment { key, deleted }, ..}) 
@@ -173,7 +173,7 @@ instance
           , ..
           }
 
-  data Msg (SimpleComment _role a) 
+  data Msg (SimpleComment domain a) 
     = Upvote
     | Downvote
     | Unvote
@@ -189,9 +189,9 @@ instance
       Nothing -> do
         mc <- sync do
           request
-            (publishingAPI @(Comment a))
+            (publishingAPI @(Comment domain a))
             socket
-            (readResource @(Comment a))
+            (readResource @(Comment domain a))
             (CommentContext context name,CommentName key)
         pure mdl { editing = mc }
       Just _ -> 
@@ -205,35 +205,35 @@ instance
 
   upon Delete (SimpleComment CommentBuilder { socket, context, name }) mdl@SimpleCommentModel { comment = Comment { key } } = do
     request 
-      (publishingAPI @(Comment a)) 
+      (publishingAPI @(Comment domain a)) 
       socket 
-      (amendResource @(Comment a)) 
+      (amendResource @(Comment domain a)) 
       (CommentContext context name,CommentName key,Comment.Delete) 
       def 
-    pure (mdl :: Model (SimpleComment _role a)) { deleted = True }
+    pure (mdl :: Model (SimpleComment domain a)) { deleted = True }
     
   upon Undelete (SimpleComment CommentBuilder { socket, context, name }) mdl@SimpleCommentModel { comment = x@Comment { key } } = do
     sync do
       request 
-        (publishingAPI @(Comment a)) 
+        (publishingAPI @(Comment domain a)) 
         socket 
-        (amendResource @(Comment a)) 
+        (amendResource @(Comment domain a)) 
         (CommentContext context name,CommentName key,Comment.Undelete) 
     c <- sync do
       request
-        (readingAPI @(Comment a))
+        (readingAPI @(Comment domain a))
         socket
-        (readProduct @(Comment a))
+        (readProduct @(Comment domain a))
         (CommentContext context name,CommentName key)
-    pure (mdl :: Model (SimpleComment _role a)) { deleted = False, comment = fromMaybe x c }
+    pure (mdl :: Model (SimpleComment domain a)) { deleted = False, comment = fromMaybe x c }
    
   upon msg (SimpleComment CommentBuilder { socket, context, name, user = Just username }) mdl@SimpleCommentModel { comment = Comment { key }, total, vote } = do
     let 
       rq v = 
         request 
-          (publishingAPI @(UserVotes a)) 
+          (publishingAPI @(UserVotes domain a)) 
           socket 
-          (amendResource @(UserVotes a)) 
+          (amendResource @(UserVotes domain a)) 
           (UserVotesContext context name,UserVotesName username,v key) 
           def 
 
@@ -251,7 +251,7 @@ instance
         | Just False <- vote -> rq Convoker.Upvote
         | otherwise          -> pure ()
             
-    pure (mdl :: Model (SimpleComment _role a)) 
+    pure (mdl :: Model (SimpleComment domain a)) 
       { total = case msg of
           Upvote                 -> succ total
           Downvote               -> pred total
@@ -277,7 +277,7 @@ instance
       button name action = Button <| OnClick (\_ -> action) |> [ name ]
       
     in 
-      Article <| Themed @(Comment a) . Id (toTxt key) |>
+      Article <| Themed @(Comment domain a) . Id (toTxt key) |>
         [ Footer <| Themed @Meta |>
           [ if del then
               Null
@@ -367,7 +367,7 @@ instance
         , case replying of
             True | Nothing <- editing, False <- collapsed -> 
               Aside <||> -- Section? I kind of like the use of Aside here.
-                [ simpleCommentForm @_role @a CommentFormBuilder
+                [ simpleCommentForm @domain @a CommentFormBuilder
                     { parent = Just key
                     , onCancel = command Replying
                     , viewer = run . SimpleComment
@@ -380,7 +380,7 @@ instance
         , case editing of
             Just c | False <- replying, False <- collapsed -> 
               Aside <||> -- Section? I kind of like the use of Aside here.
-                [ simpleCommentForm @_role @a CommentFormBuilder
+                [ simpleCommentForm @domain @a CommentFormBuilder
                     { parent = Just key
                     , onCancel = command Replying
                     , viewer = run . SimpleComment
@@ -399,7 +399,7 @@ instance
 data Controls
 data Reply
 data Children
-instance {-# OVERLAPPABLE #-} Typeable a => Theme (Comment a) where
+instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Comment domain a) where
   theme c =
     is c do
       margin-top =: 0.5em

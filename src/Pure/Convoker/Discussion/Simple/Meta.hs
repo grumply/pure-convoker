@@ -31,57 +31,57 @@ Design notes:
 
   What is inherited:
 
-    data instance Context (Meta a)
-    data instance Name (Meta a)
+    data instance Context (Meta domain a)
+    data instance Name (Meta domain a)
 
   What is implemented here:
 
-    data instance Resource (Meta a)
-    data instance Product (Meta a)
-    data instance Preview (Meta a)
-    instance Processable (Meta a)
-    instance Producible (Meta a)
-    instance Previewable (Meta a)
-    instance Amendable (Meta a)
-    data instance Action (Meta a)
-    data instance Reaction (Meta a)
+    data instance Resource (Meta domain a)
+    data instance Product (Meta domain a)
+    data instance Preview (Meta domain a)
+    instance Processable (Meta domain a)
+    instance Producible (Meta domain a)
+    instance Previewable (Meta domain a)
+    instance Amendable (Meta domain a)
+    data instance Action (Meta domain a)
+    data instance Reaction (Meta domain a)
   
   What is overridable with IncoherentIntances:
     
-    instance Previewable (Meta a)
-    instance Processable (Meta a)
-    instance Producible  (Meta a)
+    instance Previewable (Meta domain a)
+    instance Processable (Meta domain a)
+    instance Producible  (Meta domain a)
     
 -}
 
-data instance Resource (Meta a) = RawMeta
-  { votes :: Votes a
+data instance Resource (Meta domain a) = RawMeta
+  { votes :: Votes domain a
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-instance Default (Resource (Meta a)) where
+instance Default (Resource (Meta domain a)) where
   def = RawMeta (Votes [])
 
-data instance Product (Meta a) = Meta
-  { votes :: Votes a
+data instance Product (Meta domain a) = Meta
+  { votes :: Votes domain a
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-data instance Preview (Meta a) = NoMetaPreview
+data instance Preview (Meta domain a) = NoMetaPreview
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Processable (Meta a)
+instance Processable (Meta domain a)
 
-instance Producible (Meta a) where
+instance Producible (Meta domain a) where
   produce _ _ _ RawMeta {..} _ = pure Meta {..}
 
-instance Previewable (Meta a) where
+instance Previewable (Meta domain a) where
   preview _ _ _ _ _ = pure NoMetaPreview 
 
-instance Amendable (Meta a) where
-  data Amend (Meta a) 
-    = SetVote (AmendVote a)
+instance Amendable (Meta domain a) where
+  data Amend (Meta domain a) 
+    = SetVote (AmendVote domain a)
     deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
@@ -91,29 +91,31 @@ instance Amendable (Meta a) where
       , ..
       }
 
-data instance Action (Meta a) = NoMetaAction
+data instance Action (Meta domain a) = NoMetaAction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
-data instance Reaction (Meta a) = NoMetaReaction
+data instance Reaction (Meta domain a) = NoMetaReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
 trySetVote 
-  :: ( Typeable a 
+  :: ( Typeable domain
+     , Typeable a 
      , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
      , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
      )
-    => Permissions (Meta a) -> Callbacks (Meta a) -> Context a -> Name a -> Username -> Key (Comment a) -> Int -> IO Bool
+    => Permissions (Meta domain a) -> Callbacks (Meta domain a) -> Context a -> Name a -> Username -> Key (Comment domain a) -> Int -> IO Bool
 trySetVote permissions callbacks ctx nm un k v = fmap isJust do
   tryAmend permissions callbacks (MetaContext ctx nm) MetaName
     (SetVote (Vote un k v))
 
 instance 
-  ( Typeable a
-  , DefaultPermissions (Meta a), DefaultCallbacks (Meta a)
+  ( Typeable domain
+  , Typeable a
+  , DefaultPermissions (Meta domain a), DefaultCallbacks (Meta domain a)
   , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Hashable (Context a), Ord (Context a)
   , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Hashable (Name a), Ord (Name a)
-  ) => DefaultCallbacks (UserVotes a) 
+  ) => DefaultCallbacks (UserVotes domain a) 
   where
     callbacks Nothing = def
     callbacks (Just un) = def { onAmend = onAmend' }

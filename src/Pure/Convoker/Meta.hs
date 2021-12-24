@@ -24,58 +24,58 @@ Design notes:
 
   What is implemented here:
 
-    data instance Context (Meta a)
-    data instance Name (Meta a)
+    data instance Context (Meta domain a)
+    data instance Name (Meta domain a)
 
   What is not implemented here:
 
-    data isntance Resource (Meta a)
-    data instance Product (Meta a)
-    data instance Preview (Meta a)
-    instance Previewable (Meta a)
-    instance Processable (Meta a)
-    instance Producible (Meta a)
-    instance Amendable (Meta a)
-    data instance Action (Meta a)
-    data instance Reaction (Meta a)
+    data isntance Resource (Meta domain a)
+    data instance Product (Meta domain a)
+    data instance Preview (Meta domain a)
+    instance Previewable (Meta domain a)
+    instance Processable (Meta domain a)
+    instance Producible (Meta domain a)
+    instance Amendable (Meta domain a)
+    data instance Action (Meta domain a)
+    data instance Reaction (Meta domain a)
 
 -}
 
-data Meta (a :: *)
+data Meta (domain :: *) (a :: *)
 
-data instance Context (Meta a) = MetaContext (Context a) (Name a)
+data instance Context (Meta domain a) = MetaContext (Context a) (Name a)
   deriving stock Generic
-deriving instance (Eq (Context a),Eq (Name a)) => Eq (Context (Meta a))
-deriving instance (Ord (Context a),Ord (Name a)) => Ord (Context (Meta a))
-deriving instance (Hashable (Context a),Hashable (Name a)) => Hashable (Context (Meta a))
-deriving instance (Typeable a, Pathable (Context a),Pathable (Name a)) => Pathable (Context (Meta a))
-deriving instance (ToJSON (Context a),ToJSON (Name a)) => ToJSON (Context (Meta a))
-deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context (Meta a))
+deriving instance (Eq (Context a),Eq (Name a)) => Eq (Context (Meta domain a))
+deriving instance (Ord (Context a),Ord (Name a)) => Ord (Context (Meta domain a))
+deriving instance (Hashable (Context a),Hashable (Name a)) => Hashable (Context (Meta domain a))
+deriving instance (Typeable a, Pathable (Context a),Pathable (Name a)) => Pathable (Context (Meta domain a))
+deriving instance (ToJSON (Context a),ToJSON (Name a)) => ToJSON (Context (Meta domain a))
+deriving instance (FromJSON (Context a),FromJSON (Name a)) => FromJSON (Context (Meta domain a))
 
-data instance Name (Meta a) = MetaName
+data instance Name (Meta domain a) = MetaName
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance Nameable (Meta a) where
+instance Nameable (Meta domain a) where
   toName _ = MetaName
 
-instance Ownable (Meta a) where
-  isOwner un _ _ = isAdmin un
+instance Typeable domain => Ownable (Meta domain a) where
+  isOwner un _ _ = isAdmin @domain un
 
 --------------------------------------------------------------------------------
 -- Simple anonymous vote totals.
 
-data Votes a = Votes
-  { votes :: [(Key (Comment a),Int)]
+data Votes domain a = Votes
+  { votes :: [(Key (Comment domain a),Int)]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
-data AmendVote a 
-  = Vote Username (Key (Comment a)) Int
+data AmendVote domain a 
+  = Vote Username (Key (Comment domain a)) Int
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-amendVotes :: AmendVote a -> Votes a -> Votes a
+amendVotes :: AmendVote domain a -> Votes domain a -> Votes domain a
 amendVotes (Vote _ target vote) (Votes votes) = Votes (go votes)
   where
     go [] = [(target,vote)]

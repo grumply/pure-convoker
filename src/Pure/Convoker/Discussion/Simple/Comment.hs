@@ -56,13 +56,13 @@ Design notes:
 -}
 
 -- Overridable instances. These aren't used in the default discussion views.
-instance {-# INCOHERENT #-} Typeable a => Component (Preview (Comment a))
-instance {-# INCOHERENT #-} Typeable a => Component (Product (Comment a))
+instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Component (Preview (Comment domain a))
+instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Component (Product (Comment domain a))
 
-data instance Resource (Comment a) = RawComment
+data instance Resource (Comment domain a) = RawComment
   { author   :: Username
-  , key      :: Key (Comment a)
-  , parents  :: Parents a
+  , key      :: Key (Comment domain a)
+  , parents  :: Parents domain a
   , created  :: Created
   , edited   :: Edited
   , deleted  :: Deleted
@@ -71,7 +71,7 @@ data instance Resource (Comment a) = RawComment
     deriving anyclass (ToJSON,FromJSON)
 
 -- the key, author, and creation time are replaced on the server
-instance Default (Resource (Comment a)) where
+instance Default (Resource (Comment domain a)) where
   def = RawComment 
     { author   = fromTxt ""
     , key      = unsafePerformIO newKey 
@@ -82,11 +82,11 @@ instance Default (Resource (Comment a)) where
     , content  = Markdown ""
     }
 
-instance Nameable (Comment a) where
+instance Nameable (Comment domain a) where
   toName RawComment {..} = CommentName key
 
-instance Amendable (Comment a) where
-  data Amend (Comment a) 
+instance Amendable (Comment domain a) where
+  data Amend (Comment domain a) 
     = SetContent Markdown
     | Delete
     | Undelete
@@ -115,14 +115,14 @@ instance Amendable (Comment a) where
   amend _ _ = 
     Nothing
 
-data instance Action (Comment a) = NoCommentAction
+data instance Action (Comment domain a) = NoCommentAction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
-data instance Reaction (Comment a) = NoCommentReaction
+data instance Reaction (Comment domain a) = NoCommentReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Processable (Comment a) where
+instance Processable (Comment domain a) where
   process _ RawComment {..} = do
     let Parents ps = parents
     t <- time
@@ -136,7 +136,7 @@ instance Processable (Comment a) where
       }
 
 -- This can be overridden with incoherent instances to customize processing!
-instance Producible (Comment a) where
+instance Producible (Comment domain a) where
   produce _ _ _ RawComment {..} _ =
     pure Comment
       { content = if deleted == Deleted True then [ "[ removed ]" ] else parseMarkdown content
@@ -144,10 +144,11 @@ instance Producible (Comment a) where
       }
 
 instance 
-  ( Typeable a 
+  ( Typeable domain
+  , Typeable a 
   , Pathable (Context a), Hashable (Context a), Ord (Context a)
   , Pathable (Name a), Hashable (Name a), Ord (Name a)
-  ) => DefaultPermissions (Comment a) 
+  ) => DefaultPermissions (Comment domain a) 
   where
     permissions Nothing = readPermissions
     permissions (Just un) =
@@ -157,8 +158,8 @@ instance
         , canAmend  = canAmend'
         }
       where
-        canUpdate' (CommentContext ctx nm) (CommentName k) = canEditComment ctx nm k un
+        canUpdate' (CommentContext ctx nm) (CommentName k) = canEditComment @domain ctx nm k un
         canAmend' (CommentContext ctx nm) (CommentName k) = \case
-          SetContent _ -> canEditComment ctx nm k un
-          _            -> isMod ctx un 
+          SetContent _ -> canEditComment @domain ctx nm k un
+          _            -> isMod @domain ctx un 
 
