@@ -1,15 +1,18 @@
-module Pure.Convoker.Discussion.Simple.Threaded where
+module Pure.Convoker.Discussion.Simple.Threaded 
+  ( module Pure.Convoker.Discussion.Simple.Threaded
+  , module Export
+  ) where
 
 import Pure.Convoker.Discussion.Threaded (threaded)
 import Pure.Convoker as Export hiding (Upvote,Downvote,authenticatedEndpoints,unauthenticatedEndpoints,endpoints)
 import qualified Pure.Convoker as Convoker
 
-import Pure.Convoker.Discussion.Shared.Ago
-import Pure.Convoker.Discussion.Shared.Markdown
-import Pure.Convoker.Discussion.Shared.Total
-import Pure.Convoker.Discussion.Simple.Comment hiding (Delete,Undelete)
+import Pure.Convoker.Discussion.Shared.Ago as Export
+import Pure.Convoker.Discussion.Shared.Markdown as Export
+import Pure.Convoker.Discussion.Shared.Total as Export
+import Pure.Convoker.Discussion.Simple.Comment as Export hiding (Delete,Undelete)
 import qualified Pure.Convoker.Discussion.Simple.Comment as Comment
-import Pure.Convoker.Discussion.Simple.Meta hiding (Upvote,Downvote)
+import Pure.Convoker.Discussion.Simple.Meta as Export hiding (Upvote,Downvote)
 
 import Pure.Auth (Username,Token(..),Access(..),authorize,defaultOnRegistered)
 import Pure.Conjurer
