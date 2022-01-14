@@ -280,7 +280,7 @@ instance
       button name action = Button <| OnClick (\_ -> action) |> [ name ]
       
     in 
-      Article <| Themed @(Comment domain a) . Id (toTxt key) |>
+      Article <| Themed @Comment . Themed @(Comment domain a) . Id (toTxt key) |>
         [ Footer <| Themed @Meta |>
           [ if del then
               Null
@@ -467,6 +467,7 @@ instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Comment do
         child (tag H2) do
           display =: none
       
+instance Theme Comment
 instance Theme Meta
 instance Theme UserVotes
 instance Theme Edited

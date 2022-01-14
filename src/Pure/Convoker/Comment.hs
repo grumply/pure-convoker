@@ -122,7 +122,7 @@ data instance Name (Comment domain a) = CommentName (Key (Comment domain a))
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance Previewable (Comment domain a) where
+instance {-# INCOHERENT #-} Previewable (Comment domain a) where
   preview _ _ _ _ Comment {..} = pure CommentPreview {..}
 
 canEditComment 

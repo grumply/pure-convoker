@@ -122,7 +122,7 @@ data instance Reaction (Comment domain a) = NoCommentReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance Processable (Comment domain a) where
+instance {-# INCOHERENT #-} Processable (Comment domain a) where
   process _ RawComment {..} = do
     let Parents ps = parents
     t <- time
@@ -136,7 +136,7 @@ instance Processable (Comment domain a) where
       }
 
 -- This can be overridden with incoherent instances to customize processing!
-instance Producible (Comment domain a) where
+instance {-# INCOHERENT #-} Producible (Comment domain a) where
   produce _ _ _ RawComment {..} _ =
     pure Comment
       { content = if deleted == Deleted True then [ "[ removed ]" ] else parseMarkdown content
