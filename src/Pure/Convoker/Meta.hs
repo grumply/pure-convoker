@@ -66,19 +66,42 @@ instance Typeable domain => Ownable (Meta domain a) where
 -- Simple anonymous vote totals.
 
 data Votes domain a = Votes
-  { votes :: [(Key (Comment domain a),Int)]
+  { votes :: [(Key (Comment domain a),(Int,Int,Time,Double))]
   } deriving stock Generic
     deriving anyclass (ToJSON,FromJSON)
 
 data AmendVote domain a 
-  = Vote Username (Key (Comment domain a)) Int
+  = Vote Username (Key (Comment domain a)) Time Int
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
 amendVotes :: AmendVote domain a -> Votes domain a -> Votes domain a
-amendVotes (Vote _ target vote) (Votes votes) = Votes (go votes)
+amendVotes (Vote _ target t@(Milliseconds n _) vote) (Votes votes) = Votes (go votes)
   where
-    go [] = [(target,vote)]
+    go [] = 
+      let
+        (ups,dns) 
+          | vote > 0 = (vote,0)
+          | otherwise = (0,abs vote)
+      in
+        [(target,(ups,dns,t,fromIntegral vote))]
+
     go (x : rest) 
-      | fst x == target = fmap (+ vote) x : rest
+      | fst x == target = fmap go' x : rest
       | otherwise       = x : go rest
+
+    go' (ups,dns,t0@(Milliseconds l _),decay) = 
+      let
+        (ups',dns')
+          | vote > 0  = (ups + vote,dns)
+          | otherwise = (ups,dns + abs vote)
+        
+        -- votes have a 1-hour half-life
+        -- TODO: figure out how to customize this
+        -- TODO: check that this is reasonable in the presence of negative votes (downvotes)? Should I track upvote and downvote decay separately?
+        decay' = decay * 2 ** (fromIntegral (l - n) / 3.6e6) + fromIntegral vote
+
+      in
+        (ups',dns',t,decay')
+
+type CommentSorter domain a b = Ord b => Product (Meta domain a) -> Product (Comment domain a) -> b

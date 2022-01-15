@@ -31,6 +31,8 @@ import GHC.Generics hiding (Meta)
 
 data Discussion (domain :: *) (a :: *)
 
+instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Theme (Discussion domain a)
+
 data instance Resource (Discussion domain a) = RawDiscussion
   { context  :: Context a
   , name     :: Name a
@@ -230,8 +232,6 @@ discussion socket ctx nm root withAuthor withContent viewer =
       f (putMVar mv)
       pure (takeMVar mv)
 
-type CommentSorter domain a b = Ord b => Product (Meta domain a) -> Product (Comment domain a) -> b
-
 data CommentBuilder domain a = CommentBuilder
   { socket :: WebSocket
   , context :: Context a
@@ -271,6 +271,7 @@ data CommentFormBuilder domain a = CommentFormBuilder
 type DiscussionLayout (domain :: *) a b =
     ( Typeable a
     , Typeable domain
+    , Theme (Discussion domain a)
     , Theme (Comment domain a)
     , Pathable (Context a), ToJSON (Context a), FromJSON (Context a)
     , Pathable (Name a), ToJSON (Name a), FromJSON (Name a)
@@ -280,9 +281,9 @@ type DiscussionLayout (domain :: *) a b =
     , Ord b
     ) => CommentSorter domain a b -> (CommentFormBuilder domain a -> View) -> (CommentBuilder domain a -> View) -> (DiscussionBuilder domain a -> View)
 
-linear :: DiscussionLayout domain a b
+linear :: forall domain a b. DiscussionLayout domain a b
 linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | Discussion {..} <- full =
-  Div <||>
+  Div <| Themed @(Discussion domain a) |>
     (( useState False $ \State {..} ->
         if state then
           runCommentFormBuilder CommentFormBuilder 

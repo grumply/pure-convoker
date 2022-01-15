@@ -137,7 +137,7 @@ instance {-# INCOHERENT #-} Processable (Comment domain a) where
 
 -- This can be overridden with incoherent instances to customize processing!
 instance {-# INCOHERENT #-} Producible (Comment domain a) where
-  produce _ _ _ RawComment {..} _ =
+  produce _ context _ RawComment {..} _ =
     pure Comment
       { content = if deleted == Deleted True then [ "[ removed ]" ] else parseMarkdown content
       , ..
@@ -146,8 +146,8 @@ instance {-# INCOHERENT #-} Producible (Comment domain a) where
 instance 
   ( Typeable domain
   , Typeable a 
-  , Pathable (Context a), Hashable (Context a), Ord (Context a)
-  , Pathable (Name a), Hashable (Name a), Ord (Name a)
+  , Pathable (Context a), Hashable (Context a), Ord (Context a), ToJSON (Context a), FromJSON (Context a)
+  , Pathable (Name a), Hashable (Name a), Ord (Name a), ToJSON (Name a), FromJSON (Name a)
   ) => DefaultPermissions (Comment domain a) 
   where
     permissions Nothing = readPermissions

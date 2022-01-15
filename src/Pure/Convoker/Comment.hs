@@ -85,7 +85,8 @@ instance Fieldable (Parents domain a) where
   field _ _ = Null
 
 data instance Product (Comment domain a) = Comment
-  { author   :: Username
+  { context  :: Context (Comment domain a)
+  , author   :: Username
   , key      :: Key (Comment domain a)
   , parents  :: Parents domain a
   , created  :: Created
@@ -93,10 +94,13 @@ data instance Product (Comment domain a) = Comment
   , deleted  :: Deleted
   , content  :: [View]
   } deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
+
+deriving instance (ToJSON (Context (Comment domain a))) => ToJSON (Product (Comment domain a))
+deriving instance (FromJSON (Context (Comment domain a))) => FromJSON (Product (Comment domain a))
 
 data instance Preview (Comment domain a) = CommentPreview
-  { author   :: Username
+  { context  :: Context (Comment domain a)
+  , author   :: Username
   , key      :: Key (Comment domain a)
   , parents  :: Parents domain a
   , created  :: Created
@@ -104,7 +108,9 @@ data instance Preview (Comment domain a) = CommentPreview
   , deleted  :: Deleted
   , content  :: [View]
   } deriving stock Generic
-    deriving anyclass (ToJSON,FromJSON)
+  
+deriving instance (ToJSON (Context (Comment domain a))) => ToJSON (Preview (Comment domain a))
+deriving instance (FromJSON (Context (Comment domain a))) => FromJSON (Preview (Comment domain a))
 
 instance Typeable domain => Ownable (Comment domain a) where 
   isOwner un _ _ = isAdmin @domain un
@@ -129,8 +135,8 @@ canEditComment
   :: forall domain a.
      ( Typeable domain
      , Typeable a
-     , Pathable (Context a), Hashable (Context a), Ord (Context a)
-     , Pathable (Name a), Hashable (Name a), Ord (Name a)
+     , Pathable (Context a), Hashable (Context a), Ord (Context a), ToJSON (Context a), FromJSON (Context a)
+     , Pathable (Name a), Hashable (Name a), Ord (Name a), ToJSON (Name a), FromJSON (Name a)
      ) => Context a -> Name a -> Key (Comment domain a) -> Username -> IO Bool
 canEditComment ctx nm k un = 
   tryReadProduct (fullPermissions @(Comment domain a)) (callbacks @(Comment domain a) (Just un)) (CommentContext ctx nm) (CommentName k) >>= \case

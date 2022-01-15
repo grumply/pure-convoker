@@ -7,6 +7,11 @@ module Pure.Convoker.Discussion.Simple.Meta
   , Action(..)
   , Reaction(..)
   , trySetVote
+  , topSorter
+  , popularSorter
+  , controversialSorter
+  , bestSorter
+  , wilson
   ) where
 
 import Pure.Auth hiding (Key)
@@ -106,8 +111,9 @@ trySetVote
      )
     => Permissions (Meta domain a) -> Callbacks (Meta domain a) -> Context a -> Name a -> Username -> Key (Comment domain a) -> Int -> IO Bool
 trySetVote permissions callbacks ctx nm un k v = fmap isJust do
+  now <- time
   tryAmend permissions callbacks (MetaContext ctx nm) MetaName
-    (SetVote (Vote un k v))
+    (SetVote (Vote un k now v))
 
 instance 
   ( Typeable domain
@@ -122,9 +128,47 @@ instance
       where
         onAmend' (UserVotesContext ctx nm) (UserVotesName un) res pro pre lst = \case
           Upvote comment -> void do
+            now <- time
             tryAmend fullPermissions (callbacks (Just un)) (MetaContext ctx nm) MetaName 
-              (SetVote (Vote un comment 1))
+              (SetVote (Vote un comment now 1))
 
           Downvote comment -> void do
+            now <- time
             tryAmend fullPermissions (callbacks (Just un)) (MetaContext ctx nm) MetaName 
-              (SetVote (Vote un comment (-1)))
+              (SetVote (Vote un comment now (-1)))
+
+newtype SimpleSorter domain a = SimpleSorter (Double,Key (Comment domain a))
+instance Eq (SimpleSorter domain a) where
+  (==) (SimpleSorter ss0) (SimpleSorter ss1) = ss0 == ss1
+instance Ord (SimpleSorter domain a) where
+  compare (SimpleSorter (c0,k0)) (SimpleSorter (c1,k1)) =
+    case compare c1 c0 of
+      EQ -> compare k0 k1
+      x  -> x
+
+topSorter :: CommentSorter domain a (SimpleSorter domain a)
+topSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> fromIntegral (ups - downs)) (List.lookup key vs)),key)
+
+bestSorter :: CommentSorter domain a (SimpleSorter domain a)
+bestSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> wilson (fromIntegral ups) (fromIntegral (ups + downs))) (List.lookup key vs)),key)
+
+wilson :: Double -> Double -> Double
+wilson positive total 
+  | total == 0 = 0
+  | total < positive = 0
+  | otherwise =
+    let 
+      z = 0.96
+      z2 = z ^ 2
+      r = positive / total
+      x = r + z2 / (2 * total)
+      y = z * sqrt((r * (1 - r) + z2 / (4 * total) ) / total)
+    in 
+      (x - y) / (1 + z2 / total)
+
+controversialSorter :: CommentSorter domain a (SimpleSorter domain a)
+controversialSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> wilson (fromIntegral downs) (fromIntegral (ups + downs))) (List.lookup key vs)),key)
+
+popularSorter :: CommentSorter domain a (SimpleSorter domain a)
+popularSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(_,_,_,d) -> d) (List.lookup key vs)),key)
+

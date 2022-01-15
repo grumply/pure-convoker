@@ -44,31 +44,20 @@ ordered)
 -}
 
 simpleThreaded 
-  :: forall domain a. 
+  :: forall domain a b. 
     ( Typeable a
     , Typeable (domain :: *)
     , Theme (Comment domain a)
+    , Theme (Discussion domain a)
     , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
     , Formable (Resource (Comment domain a))
     , Default (Resource (Comment domain a))
     , ToJSON (Context a), FromJSON (Context a), Pathable (Context a), Eq (Context a)
     , ToJSON (Name a), FromJSON (Name a), Pathable (Name a), Eq (Name a)
-    , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment domain a)
     , Fieldable Markdown
-    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment domain a)) -> (Username -> View) -> ([View] -> [View]) -> View
-simpleThreaded ws ctx nm root withAuthor withContent = threaded @domain ws ctx nm root withAuthor withContent simpleSorter simpleCommentForm (run . SimpleComment)
-
-newtype SimpleSorter domain a = SimpleSorter (Int,Key (Comment domain a))
-instance Eq (SimpleSorter domain a) where
-  (==) (SimpleSorter ss0) (SimpleSorter ss1) = ss0 == ss1
-instance Ord (SimpleSorter domain a) where
-  compare (SimpleSorter (c0,k0)) (SimpleSorter (c1,k1)) =
-    case compare c1 c0 of
-      EQ -> compare k0 k1
-      x  -> x
-
-simpleSorter :: CommentSorter domain a (SimpleSorter domain a)
-simpleSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (List.lookup key vs),key)
+    , Ord b
+    ) => WebSocket -> Context a -> Name a -> Maybe (Key (Comment domain a)) -> (Username -> View) -> ([View] -> [View]) -> CommentSorter domain a b -> View
+simpleThreaded ws ctx nm root withAuthor withContent sorter = threaded @domain ws ctx nm root withAuthor withContent sorter simpleCommentForm (run . SimpleComment)
 
 simpleCommentForm 
   :: forall (domain :: *) (a :: *). 
@@ -142,9 +131,9 @@ newtype SimpleComment (domain :: *) (a :: *) = SimpleComment (CommentBuilder dom
 instance 
   ( Typeable domain
   , Typeable a
-  , ToJSON (Context a), FromJSON (Context a)
-  , ToJSON (Name a), FromJSON (Name a)
-  , Theme Edited, Theme Created, Theme Meta, Theme UserVotes, Theme Username, Theme Controls, Theme Reply, Theme Markdown, Theme Children, Theme (Comment domain a)
+  , ToJSON (Context a), FromJSON (Context a), Pathable (Context a)
+  , ToJSON (Name a), FromJSON (Name a), Pathable (Name a)
+  , Theme (Comment domain a)
   , Fieldable Markdown
   ) => Component (SimpleComment domain a) where
   data Model (SimpleComment domain a) = SimpleCommentModel
@@ -164,7 +153,7 @@ instance
         editing = Nothing
         replying = False
         collapsed = False
-        total = fromMaybe 0 (List.lookup key vs)
+        total = fromMaybe 0 (fmap (\(ups,downs,_,_) -> ups - downs) (List.lookup key vs))
         vote 
           | List.elem key upvotes   = Just True
           | List.elem key downvotes = Just False
@@ -402,7 +391,7 @@ instance
 data Controls
 data Reply
 data Children
-instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Comment domain a) where
+instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Theme (Comment domain a) where
   theme c =
     is c do
       margin-top =: 0.5em

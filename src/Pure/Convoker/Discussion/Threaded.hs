@@ -98,6 +98,7 @@ threaded
   :: forall domain a b. 
     ( Typeable a
     , Typeable (domain :: *)
+    , Theme (Discussion domain a)
     , Theme (Comment domain a)
     , ToJSON (Resource (Comment domain a)), FromJSON (Resource (Comment domain a))
     , Formable (Resource (Comment domain a))
@@ -111,9 +112,9 @@ threaded
 threaded ws ctx nm root withAuthor withContent sorter commentFormBuilder commentBuilder = 
   discussion @domain @a ws ctx nm root withAuthor withContent (threads @domain @a @b sorter commentFormBuilder commentBuilder)
 
-threads :: DiscussionLayout domain a b
+threads :: forall domain a b. DiscussionLayout domain a b
 threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full = Discussion { comments }, ..} =
-  Div <||> 
+  Div <| Themed @(Discussion domain a) |> 
     ( (useState False $ \State {..} ->
         if state then
           runCommentFormBuilder CommentFormBuilder 
