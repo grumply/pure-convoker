@@ -11,6 +11,7 @@ module Pure.Convoker.Discussion.Simple.Meta
   , popularSorter
   , controversialSorter
   , bestSorter
+  , newSorter
   , wilson
   ) where
 
@@ -172,3 +173,5 @@ controversialSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fr
 popularSorter :: CommentSorter domain a (SimpleSorter domain a)
 popularSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(_,_,_,d) -> d) (List.lookup key vs)),key)
 
+newSorter :: CommentSorter domain a (SimpleSorter domain a)
+newSorter Meta {} Comment { created = Created (Milliseconds ms _), key } = SimpleSorter (fromIntegral ms,key)
