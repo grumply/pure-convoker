@@ -278,9 +278,9 @@ instance
                 [ case user of
                     Just _ ->
                       case vote of
-                        Just False -> button "▼" (command Unvote)
-                        Just True  -> button "▽" (command Unvote)
-                        Nothing    -> button "▽" (command Downvote)
+                        Just False -> button "▼" (command (Unvote @domain @a))
+                        Just True  -> button "▽" (command (Unvote @domain @a))
+                        Nothing    -> button "▽" (command (Downvote @domain @a))
                     _ -> Null
 
                 , txt (simplified total)
@@ -288,9 +288,9 @@ instance
                 , case user of
                     Just _ ->
                       case vote of
-                        Just True  -> button "▲" (command Unvote)
-                        Just False -> button "△" (command Unvote)
-                        Nothing    -> button "△" (command Upvote)
+                        Just True  -> button "▲" (command (Unvote @domain @a))
+                        Just False -> button "△" (command (Unvote @domain @a))
+                        Nothing    -> button "△" (command (Upvote @domain @a))
                     _ -> Null
 
                 ]
@@ -320,21 +320,21 @@ instance
                 _ -> Null
               
             , if collapsed then 
-                button (fromTxt $ "[" <> toTxt (size + 1) <> " more]") (command Uncollapse)
+                button (fromTxt $ "[" <> toTxt (size + 1) <> " more]") (command (Uncollapse @domain @a))
               else 
-                button "[-]" (command Collapse)
+                button "[-]" (command (Collapse @domain @a))
 
             , if Just author == user && isNothing editing then
-                button "edit" (command Editing)
+                button "edit" (command (Editing @domain @a))
               else if Just author == user && isJust editing then
-                button "cancel" (command Editing)
+                button "cancel" (command (Editing @domain @a))
               else
                 Null
 
             , if (admin || mod) && Prelude.not del then
-                button "delete" (command Delete)
+                button "delete" (command (Delete @domain @a))
               else if (admin || mod) && del then
-                button "undelete" (command Undelete)
+                button "undelete" (command (Undelete @domain @a))
               else
                 Null
 
@@ -352,16 +352,16 @@ instance
         , if collapsed then
             Null
           else if replying then 
-            Footer <| Themed @Reply |> [ button "cancel" (command Replying) ]
+            Footer <| Themed @Reply |> [ button "cancel" (command (Replying @domain @a)) ]
           else
-            Footer <| Themed @Reply |> [ button "reply" (command Replying) ]
+            Footer <| Themed @Reply |> [ button "reply" (command (Replying @domain @a)) ]
 
         , case replying of
             True | Nothing <- editing, False <- collapsed -> 
               Aside <||> -- Section? I kind of like the use of Aside here.
                 [ simpleCommentForm @domain @a CommentFormBuilder
                     { parent = Just key
-                    , onCancel = command Replying
+                    , onCancel = command (Replying @domain @a)
                     , viewer = run . SimpleComment
                     , comment = Nothing
                     , .. 
@@ -374,7 +374,7 @@ instance
               Aside <||> -- Section? I kind of like the use of Aside here.
                 [ simpleCommentForm @domain @a CommentFormBuilder
                     { parent = Just key
-                    , onCancel = command Replying
+                    , onCancel = command (Replying @domain @a)
                     , viewer = run . SimpleComment
                     , comment = Just c
                     , .. 
