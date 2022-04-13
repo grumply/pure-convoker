@@ -52,7 +52,7 @@ Design notes:
     data instance Action (Meta domain a)
     data instance Reaction (Meta domain a)
   
-  What is overridable with IncoherentIntances:
+  What is overridable:
     
     instance Previewable (Meta domain a)
     instance Processable (Meta domain a)
@@ -80,10 +80,10 @@ data instance Preview (Meta domain a) = NoMetaPreview
 instance Processable (Meta domain a)
 
 instance Producible (Meta domain a) where
-  produce _ _ _ RawMeta {..} _ = pure Meta {..}
+  produce _ _ RawMeta {..} _ = pure Meta {..}
 
 instance Previewable (Meta domain a) where
-  preview _ _ _ _ _ = pure NoMetaPreview 
+  preview _ _ _ _ = pure NoMetaPreview 
 
 instance Amendable (Meta domain a) where
   data Amend (Meta domain a) 

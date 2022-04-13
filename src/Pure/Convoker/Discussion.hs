@@ -31,7 +31,7 @@ import GHC.Generics hiding (Meta)
 
 data Discussion (domain :: *) (a :: *)
 
-instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Theme (Discussion domain a)
+instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Discussion domain a)
 
 data instance Resource (Discussion domain a) = RawDiscussion
   { context  :: Context a
@@ -92,11 +92,11 @@ deriving instance (FromJSON (Product (Comment domain a)), FromJSON (Preview (Com
 instance Processable (Discussion domain a)
 
 instance Producible (Discussion domain a) where
-  produce _ _ _ RawDiscussion {..} _ =
+  produce _ _ RawDiscussion {..} _ =
     pure Discussion { comments = fmap fst comments, .. }
 
 instance Previewable (Discussion domain a) where
-  preview _ _ _ RawDiscussion {..} _ =
+  preview _ _ RawDiscussion {..} _ =
     pure DiscussionPreview { comments = fmap snd comments, .. }
 
 data instance Action (Discussion domain a) = NoDiscussionAction

@@ -391,7 +391,7 @@ instance
 data Controls
 data Reply
 data Children
-instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Theme (Comment domain a) where
+instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Theme (Comment domain a) where
   theme c =
     is c do
       margin-top =: 0.5em

@@ -63,10 +63,10 @@ data instance Name (Mods domain a) = ModsName
 instance Processable (Mods domain a)
 
 instance Producible (Mods domain a) where
-  produce _ _ _ RawMods {..} _ = pure Mods {..}
+  produce _ _ RawMods {..} _ = pure Mods {..}
 
 instance Previewable (Mods domain a) where
-  preview _ _ _ _ _ = pure NoModsPreview
+  preview _ _ _ _ = pure NoModsPreview
 
 instance Nameable (Mods domain a) where
   toName _ = ModsName

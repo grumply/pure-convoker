@@ -52,10 +52,10 @@ data instance Name (Admins ctx) = AdminsName
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
 instance Producible (Admins ctx) where
-  produce _ _ _ RawAdmins {..} _ = pure Admins {..}
+  produce _ _ RawAdmins {..} _ = pure Admins {..}
 
 instance Previewable (Admins ctx) where
-  preview _ _ _ _ _ = pure NoAdminsPreview
+  preview _ _ _ _ = pure NoAdminsPreview
 
 instance Nameable (Admins ctx) where
   toName _ = AdminsName

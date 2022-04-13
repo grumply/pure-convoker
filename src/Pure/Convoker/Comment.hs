@@ -49,7 +49,7 @@ Design notes:
     data instance Action (Comment a)
     data instance Reaction (Comment a)
 
-  What is overridable with IncoherentInstances:
+  What is overridable:
 
     instance Previewable (Comment a)
 
@@ -128,8 +128,8 @@ data instance Name (Comment domain a) = CommentName (Key (Comment domain a))
   deriving stock (Generic,Eq,Ord)
   deriving anyclass (Hashable,Pathable,ToJSON,FromJSON)
 
-instance {-# INCOHERENT #-} Previewable (Comment domain a) where
-  preview _ _ _ _ Comment {..} = pure CommentPreview {..}
+instance {-# OVERLAPPABLE #-} Previewable (Comment domain a) where
+  preview _ _ _ Comment {..} = pure CommentPreview {..}
 
 canEditComment 
   :: forall domain a.

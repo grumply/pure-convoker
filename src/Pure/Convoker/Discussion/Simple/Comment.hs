@@ -46,7 +46,7 @@ Design notes:
     instance Processable (Comment a)
     instance Producible (Comment a)
   
-  What is overridable with IncoherentIntances:
+  What is overridable:
     
     instance Nameable (Comment a)
     instance Previewable (Comment a)
@@ -56,8 +56,8 @@ Design notes:
 -}
 
 -- Overridable instances. These aren't used in the default discussion views.
-instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Component (Preview (Comment domain a))
-instance {-# INCOHERENT #-} (Typeable domain, Typeable a) => Component (Product (Comment domain a))
+instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Component (Preview (Comment domain a))
+instance {-# OVERLAPPABLE #-} (Typeable domain, Typeable a) => Component (Product (Comment domain a))
 
 data instance Resource (Comment domain a) = RawComment
   { author   :: Username
@@ -122,8 +122,8 @@ data instance Reaction (Comment domain a) = NoCommentReaction
   deriving stock Generic
   deriving anyclass (ToJSON,FromJSON)
 
-instance {-# INCOHERENT #-} Processable (Comment domain a) where
-  process _ RawComment {..} = do
+instance {-# OVERLAPPABLE #-} Processable (Comment domain a) where
+  process RawComment {..} = do
     let Parents ps = parents
     t <- time
     k <- newKey
@@ -135,9 +135,9 @@ instance {-# INCOHERENT #-} Processable (Comment domain a) where
       , ..
       }
 
--- This can be overridden with incoherent instances to customize processing!
-instance {-# INCOHERENT #-} Producible (Comment domain a) where
-  produce _ context _ RawComment {..} _ =
+-- This can be overridden with overlapping instances to customize processing!
+instance {-# OVERLAPPABLE #-} Producible (Comment domain a) where
+  produce context _ RawComment {..} _ =
     pure Comment
       { content = if deleted == Deleted True then [ "[ removed ]" ] else parseMarkdown content
       , ..

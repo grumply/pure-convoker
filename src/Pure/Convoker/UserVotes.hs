@@ -127,10 +127,10 @@ instance Amendable (UserVotes domain a) where
 instance Processable (UserVotes domain a)
 
 instance Producible (UserVotes domain a) where
-  produce _ _ _ RawUserVotes {..} _ = pure UserVotes {..}
+  produce _ _ RawUserVotes {..} _ = pure UserVotes {..}
 
 instance Previewable (UserVotes domain a) where
-  preview _ _ _ _ _ = pure NoUserVotesPreview
+  preview _ _ _ _ = pure NoUserVotesPreview
 
 data instance Action (UserVotes domain a) = NoUserVotesAction
   deriving stock Generic
