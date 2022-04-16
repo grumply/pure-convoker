@@ -119,6 +119,7 @@ data DiscussionBuilder domain a = DiscussionBuilder
   , admin :: Bool
   , mod :: Bool
   , onRefresh :: IO ()
+  , onVote :: Amend (UserVotes domain a) -> IO ()
   , withAuthor :: Username -> View
   , withContent :: [View] -> [View]
   , admins :: Product (Admins domain)
@@ -180,7 +181,22 @@ discussion socket ctx nm root withAuthor withContent viewer =
                       _ -> False
 
                 in
-                  viewer (DiscussionBuilder {..} :: DiscussionBuilder domain a)
+                  useState votes $ \State {..} ->
+                    let
+                      onVote (Upvote k) =
+                        modify $ \case
+                          Just UserVotes {..}
+                            | k `elem` downvotes -> Just UserVotes { downvotes = List.filter (/= k) downvotes, .. }
+                            | k `notElem` upvotes -> Just UserVotes { upvotes = k : upvotes, .. }
+                          x -> x
+                      onVote (Downvote k) =
+                        modify $ \case
+                          Just UserVotes {..}
+                            | k `elem` upvotes -> Just UserVotes { upvotes = List.filter (/= k) upvotes, .. }
+                            | k `notElem` downvotes -> Just UserVotes { downvotes = k : downvotes, .. }
+                          x -> x
+                    in
+                      viewer (DiscussionBuilder {..} :: DiscussionBuilder domain a)
 
             in
               consuming consumer
@@ -240,7 +256,8 @@ data CommentBuilder domain a = CommentBuilder
   , admin :: Bool
   , mod :: Bool
   , onRefresh :: IO ()
-  , children :: [View]
+  , onVote :: Amend (UserVotes domain a) -> IO ()
+  , children :: [(Int,View)]
   , withAuthor :: Username -> View
   , withContent :: [View] -> [View]
   , root :: Maybe (Key (Comment domain a))

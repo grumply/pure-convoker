@@ -92,6 +92,7 @@ simpleCommentForm CommentFormBuilder {..} = authorize @domain (Access socket id 
                     admin = False
                     mod = False
                     withAuthor = txt
+                    onVote = \_ -> pure ()
                   in
                     viewer CommentBuilder {..}
                 ]
@@ -218,15 +219,17 @@ instance
         (readProduct @(Comment domain a))
         (CommentContext context name,CommentName key)
     pure (mdl :: Model (SimpleComment domain a)) { deleted = False, comment = fromMaybe x c }
-   
-  upon msg (SimpleComment CommentBuilder { socket, context, name, user = Just username }) mdl@SimpleCommentModel { comment = Comment { key }, total, vote } = do
+
+  upon msg (SimpleComment CommentBuilder { socket, onVote, context, name, user = Just username }) mdl@SimpleCommentModel { comment = Comment { key }, total, vote } = do
     let 
-      rq v = 
+      rq v = do
+        let vote = v key
+        onVote vote
         request 
           (publishingAPI @(UserVotes domain a)) 
           socket 
           (amendResource @(UserVotes domain a)) 
-          (UserVotesContext context name,UserVotesName username,v key) 
+          (UserVotesContext context name,UserVotesName username,vote) 
           def 
 
     case msg of
@@ -383,7 +386,7 @@ instance
             _ -> Null
 
         , if Prelude.not (Prelude.null children) && Prelude.not collapsed then 
-            Section <| Themed @Children |> children 
+            Section <| Themed @Children |#> children 
           else 
             Null 
         ]

@@ -114,8 +114,8 @@ threaded ws ctx nm root withAuthor withContent sorter commentFormBuilder comment
 
 threads :: forall domain a b. DiscussionLayout domain a b
 threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full = Discussion { comments }, ..} =
-  Div <| Themed @(Discussion domain a) |> 
-    ( (useState False $ \State {..} ->
+  Article <| Themed @(Discussion domain a) |> 
+    [ (useState False $ \State {..} ->
         if state then
           runCommentFormBuilder CommentFormBuilder 
             { parent = Nothing
@@ -125,11 +125,14 @@ threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full 
             , ..
             } 
         else
-          Button <| OnClick (\_ -> modify (const True)) |> [ "Add Comment" ]
+          Header <||>
+            [ Button <| OnClick (\_ -> modify (const True)) |> [ "Add Comment" ] 
+            ]
       )
 
-    : forest Nothing Nothing (maybe threads isolated root)
-    )
+    , Keyed Section <||#> 
+      (forest Nothing Nothing (maybe threads isolated root))
+    ]
   where
     edges = fmap (\(comment@Comment { key, parents = Parents ps }) -> (comment,key,ps)) comments
     
@@ -144,7 +147,7 @@ threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full 
       let look (G.Node n _) = let (comment,_,_) = nodeFromVertex n in comment
           sorted = List.sortOn (sorter meta . look) ts 
       in 
-        [ tree rt parent previous next t 
+        [ tree rt parent previous next t
         | (t,pr,nx) <- zip3 sorted (Nothing : fmap Just sorted) (List.tail (fmap Just sorted ++ [Nothing])) 
         , let 
             rt = if isJust root then root else parent
@@ -153,11 +156,12 @@ threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full 
         ]
     
     tree root parent previous next node@(G.Node (nodeFromVertex -> (comment@Comment { key },_,_)) sub) =
-      runCommentBuilder CommentBuilder 
+      (hash key,runCommentBuilder CommentBuilder 
         { children = forest root (Just key) sub
         , size = Foldable.length node - 1 -- since children are passed lazily pre-rendered
         , ..
         }
+      )
 
     {- 
       What is the performance difference between the above and this?

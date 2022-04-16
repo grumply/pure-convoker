@@ -11,7 +11,9 @@ module Pure.Convoker.Discussion.Simple.Meta
   , popularSorter
   , controversialSorter
   , bestSorter
+  , worstSorter
   , newSorter
+  , oldSorter
   , wilson
   ) where
 
@@ -147,12 +149,6 @@ instance Ord (SimpleSorter domain a) where
       EQ -> compare k0 k1
       x  -> x
 
-topSorter :: CommentSorter domain a (SimpleSorter domain a)
-topSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> fromIntegral (ups - downs)) (List.lookup key vs)),key)
-
-bestSorter :: CommentSorter domain a (SimpleSorter domain a)
-bestSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> wilson (fromIntegral ups) (fromIntegral (ups + downs))) (List.lookup key vs)),key)
-
 wilson :: Double -> Double -> Double
 wilson positive total 
   | total == 0 = 0
@@ -167,11 +163,28 @@ wilson positive total
     in 
       (x - y) / (1 + z2 / total)
 
+topSorter :: CommentSorter domain a (SimpleSorter domain a)
+topSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> fromIntegral (ups - downs)) (List.lookup key vs)),key)
+
+bestSorter :: CommentSorter domain a (SimpleSorter domain a)
+bestSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> wilson (fromIntegral ups) (fromIntegral (ups + downs))) (List.lookup key vs)),key)
+
+worstSorter :: CommentSorter domain a (SimpleSorter domain a)
+worstSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> wilson (fromIntegral downs) (fromIntegral (ups + downs))) (List.lookup key vs)),key)
+
 controversialSorter :: CommentSorter domain a (SimpleSorter domain a)
-controversialSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(ups,downs,_,_) -> wilson (fromIntegral downs) (fromIntegral (ups + downs))) (List.lookup key vs)),key)
+controversialSorter m c@Comment { parents } 
+  | Parents [] <- parents
+  = worstSorter m c
+
+  | otherwise
+  = bestSorter m c
 
 popularSorter :: CommentSorter domain a (SimpleSorter domain a)
 popularSorter Meta { votes = Votes vs } Comment { key } = SimpleSorter (fromMaybe 0 (fmap (\(_,_,_,d) -> d) (List.lookup key vs)),key)
 
 newSorter :: CommentSorter domain a (SimpleSorter domain a)
 newSorter Meta {} Comment { created = Created (Milliseconds ms _), key } = SimpleSorter (fromIntegral ms,key)
+
+oldSorter :: CommentSorter domain a (SimpleSorter domain a)
+oldSorter Meta {} Comment { created = Created (Milliseconds ms _), key } = SimpleSorter (fromIntegral (negate ms),key)
