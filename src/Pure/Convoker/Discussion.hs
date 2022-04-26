@@ -9,7 +9,7 @@ import Pure.Convoker.UserVotes
 import Pure.Auth (Username,Token(..),Access(..),withToken,authorize,defaultOnRegistered)
 import Pure.Conjurer
 import Pure.Elm.Application (storeScrollPosition,restoreScrollPosition)
-import Pure.Elm.Component as Pure hiding (not,key,pattern Meta)
+import Pure.Elm.Component as Pure hiding (not,key,pattern Meta,modify,state,get)
 import Pure.Data.JSON (ToJSON,FromJSON)
 import Pure.Data.Txt
 import Pure.Data.Render
@@ -148,13 +148,13 @@ discussion socket ctx nm root withAuthor withContent viewer =
 
     -- simple switch used to trigger re-request and re-render
     -- See `tagged` and `refresh` below for use.
-    useState False $ \State {..} ->
+    state False $
 
       let 
         onRefresh = modify Prelude.not
 
         tagged
-          | state     = Tagged @True
+          | get       = Tagged @True
           | otherwise = Tagged @False
 
       in 
@@ -181,7 +181,7 @@ discussion socket ctx nm root withAuthor withContent viewer =
                       _ -> False
 
                 in
-                  useState votes $ \State {..} ->
+                  state votes $ 
                     let
                       onVote (Upvote k) =
                         modify $ \case
@@ -301,8 +301,8 @@ type DiscussionLayout (domain :: *) a b =
 linear :: forall domain a b. DiscussionLayout domain a b
 linear sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder {..} | Discussion {..} <- full =
   Div <| Themed @(Discussion domain a) |>
-    (( useState False $ \State {..} ->
-        if state then
+    (( state False $ 
+        if get then
           runCommentFormBuilder CommentFormBuilder 
             { parent = Nothing
             , viewer = runCommentBuilder

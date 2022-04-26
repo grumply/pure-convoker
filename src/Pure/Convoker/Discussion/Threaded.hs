@@ -10,9 +10,9 @@ import Pure.Convoker.Discussion
 import Pure.Auth (Username,Token(..))
 import Pure.Conjurer
 import Pure.Data.JSON hiding (Null)
-import Pure.Elm.Component hiding (pattern Meta)
+import Pure.Elm.Component hiding (pattern Meta,modify,state,get)
 import Data.Foldable as Foldable
-import Pure.Hooks (useState,State(..))
+import Pure.Hooks (state,get,modify)
 import Pure.WebSocket
 
 import Data.Hashable
@@ -115,8 +115,8 @@ threaded ws ctx nm root withAuthor withContent sorter commentFormBuilder comment
 threads :: forall domain a b. DiscussionLayout domain a b
 threads sorter runCommentFormBuilder runCommentBuilder DiscussionBuilder { full = Discussion { comments }, ..} =
   Article <| Themed @(Discussion domain a) |> 
-    [ (useState False $ \State {..} ->
-        if state then
+    [ (state False $
+        if get then
           runCommentFormBuilder CommentFormBuilder 
             { parent = Nothing
             , viewer = runCommentBuilder
