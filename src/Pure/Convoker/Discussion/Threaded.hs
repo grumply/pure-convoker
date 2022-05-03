@@ -10,9 +10,8 @@ import Pure.Convoker.Discussion
 import Pure.Auth (Username,Token(..))
 import Pure.Conjurer
 import Pure.Data.JSON hiding (Null)
-import Pure.Elm.Component hiding (pattern Meta,modify,state,get)
+import Pure.Elm.Fold hiding (pattern Meta)
 import Data.Foldable as Foldable
-import Pure.Hooks (state,get,modify)
 import Pure.WebSocket
 
 import Data.Hashable

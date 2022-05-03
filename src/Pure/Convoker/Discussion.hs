@@ -9,11 +9,10 @@ import Pure.Convoker.UserVotes
 import Pure.Auth (Username,Token(..),Access(..),withToken,authorize,defaultOnRegistered)
 import Pure.Conjurer
 import Pure.Elm.Application (storeScrollPosition,restoreScrollPosition)
-import Pure.Elm.Component as Pure hiding (not,key,pattern Meta,modify,state,get)
+import Pure.Elm.Fold as Pure hiding (not,key,pattern Meta)
 import Pure.Data.JSON (ToJSON,FromJSON)
 import Pure.Data.Txt
 import Pure.Data.Render
-import Pure.Hooks
 import Pure.Maybe
 import Pure.Router as R
 import Pure.Sync
